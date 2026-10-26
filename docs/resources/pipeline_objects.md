@@ -36,7 +36,7 @@ resource "hevo_pipeline_objects" "postgres" {
 
 ### Optional
 
-- `objects` (Attributes Map) Objects keyed by name, as the Pipeline lists them (for example `public.orders`). A child object follows its parent; name only the parent. (see [below for nested schema](#nestedatt--objects))
+- `objects` (Attributes Map) Objects keyed by fully qualified name, as the Pipeline lists them in `fully_qualified_name` (for example `public.orders`). A child object follows its parent; name only the parent. (see [below for nested schema](#nestedatt--objects))
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
 
 ### Read-Only
