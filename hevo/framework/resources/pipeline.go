@@ -373,10 +373,19 @@ func (r *pipeline) sourceUpdate(plan, state model.PipelineResourceModel, id int6
 		hasChange = true
 	}
 
-	if changed := core.ChangedConfig(planConfig, stateConfig); len(changed) > 0 {
-		call.Config(changed)
+	// Right after an import, state has no source_config: Hevo never returns it. Like a config read
+	// back on import, the configured one is taken as current, so nothing is sent for it; fields
+	// Hevo fixes after creation would refuse a resend.
+	if stateConfig != nil {
+		if changed := core.ChangedConfig(planConfig, stateConfig); len(changed) > 0 {
+			call.Config(changed)
 
-		hasChange = true
+			hasChange = true
+		}
+	} else if planConfig != nil {
+		diags.AddAttributeWarning(path.Root("source_config"), "source_config recorded, not sent",
+			"This Pipeline was imported and Hevo does not return a Source's settings, so source_config is "+
+				"recorded as written without being checked against Hevo. Later changes to it are sent.")
 	}
 
 	if !plan.SourceAuth.Equal(state.SourceAuth) && !plan.SourceAuth.IsNull() {

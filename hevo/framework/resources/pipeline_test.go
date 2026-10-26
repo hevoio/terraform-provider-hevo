@@ -294,3 +294,69 @@ resource "hevo_pipeline" "p" {
 		},
 	})
 }
+
+func TestPipelineResourceImportThenApplyMock(t *testing.T) {
+	t.Parallel()
+
+	client, factories := mock.NewProvider()
+	fake := &fakePipelines{}
+	fake.register(t, client)
+
+	// A Pipeline that already exists, built in the Hevo UI.
+	fake.exists = true
+	fake.pipeline = map[string]any{
+		"id": 42, "name": "HubSpot prod", "state": "Disabled", "disabled": true,
+		"health":                  map[string]any{"value": "HEALTHY"},
+		"source":                  map[string]any{"name": "HubSpot", "connector_id": "hubspot", "type": "HUBSPOT"},
+		"destination_id":          7,
+		"destination_prefix":      "hubspot_",
+		"replication_type":        "HISTORICAL_AND_INCREMENTAL",
+		"load_mode":               "MERGE",
+		"schema_evolution":        "ALLOW_ALL",
+		"schedule":                map[string]any{"sync_type": "SCHEDULED", "frequency_minutes": 30},
+		"failure_handling_policy": map[string]any{"object_failure_level": "ALL_OR_NONE", "object_failure_threshold": 0},
+		"created_at":              1760000000000,
+		"updated_at":              1760000000000,
+	}
+
+	config := pipelineConfig("HubSpot prod", "30", "pat-2", "MERGE")
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{
+				Config:             config,
+				ResourceName:       "hevo_pipeline.p",
+				ImportState:        true,
+				ImportStateId:      "42",
+				ImportStatePersist: true,
+			},
+			{
+				// The first apply records source_config without sending it.
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("hevo_pipeline.p", "source_config.private_app_access_token", "pat-2"),
+					func(*terraformState) error {
+						if fake.sourcePatches != 0 {
+							return fmt.Errorf("Source PATCH calls = %d, want 0: an imported source_config must not be resent", fake.sourcePatches)
+						}
+
+						return nil
+					},
+				),
+			},
+			{
+				// A later change to it is sent, only the changed key.
+				Config: pipelineConfig("HubSpot prod", "30", "pat-3", "MERGE"),
+				Check: func(*terraformState) error {
+					want := map[string]any{"config": map[string]any{"private_app_access_token": "pat-3"}}
+					if !reflect.DeepEqual(fake.sourcePatch, want) {
+						return fmt.Errorf("Source PATCH = %v, want %v", fake.sourcePatch, want)
+					}
+
+					return nil
+				},
+			},
+		},
+	})
+}

@@ -57,7 +57,7 @@ resource "hevo_pipeline" "hubspot" {
 - `replication_type` (String) `HISTORICAL_AND_INCREMENTAL` or `INCREMENTAL_ONLY`. Changing it replaces the Pipeline, and the new Pipeline loads all historical data again.
 - `schedule` (Attributes) When the Pipeline ingests. (see [below for nested schema](#nestedatt--schedule))
 - `schema_evolution` (String) `ALLOW_ALL` replicates new objects and fields as they appear; `BLOCK_ALL` does not.
-- `source_config` (Dynamic) The Source's settings, as the connector's schema in `hevo_connector_metadata` names them. Hevo does not return a Source's settings, so changes made outside Terraform are not detected; a change here is sent as is, and Hevo tests the connection.
+- `source_config` (Dynamic) The Source's settings, as the connector's schema in `hevo_connector_metadata` names them. Hevo does not return a Source's settings, so changes made outside Terraform are not detected; a change here is sent as is, and Hevo tests the connection. After an import, the first apply records it without sending it.
 - `source_connector_id` (String) The source connector, for example `hubspot`. List them with the `hevo_connectors` data source. Changing it replaces the Pipeline, and the new Pipeline loads all historical data again.
 - `source_name` (String) The Source's display name, unique within the team.
 
@@ -132,7 +132,7 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 
 ```shell
 # Import a Pipeline by its numeric id. Hevo does not return a Source's settings: write
-# source_config (and source_auth for an OAuth app) in the configuration; the next apply sends
-# them once.
+# source_config (and source_auth for an OAuth app) in the configuration. The next apply records
+# source_config as written without sending it, and sends source_auth.
 terraform import hevo_pipeline.hubspot 42
 ```

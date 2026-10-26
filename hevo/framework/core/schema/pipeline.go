@@ -43,7 +43,8 @@ func PipelineResourceSchema(ctx context.Context) schema.Schema {
 				Required: true,
 				Description: "The Source's settings, as the connector's schema in `hevo_connector_metadata` names " +
 					"them. Hevo does not return a Source's settings, so changes made outside Terraform are not " +
-					"detected; a change here is sent as is, and Hevo tests the connection.",
+					"detected; a change here is sent as is, and Hevo tests the connection. After an import, the " +
+					"first apply records it without sending it.",
 			},
 			"source_auth": schema.DynamicAttribute{
 				Optional:  true,
