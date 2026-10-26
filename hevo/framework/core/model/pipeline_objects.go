@@ -30,6 +30,16 @@ type PipelineObjectModel struct {
 	ExcludedFields types.Set    `tfsdk:"excluded_fields"`
 }
 
+// ObjectKey is how an object is named in hevo_pipeline_objects and in a selection: its fully
+// qualified name (schema.object), or its name for a source without schemas.
+func ObjectKey(o pipelineobjects.PipelineObject) string {
+	if o.FullyQualifiedName != "" {
+		return o.FullyQualifiedName
+	}
+
+	return o.Name
+}
+
 // IsSelectable reports whether an object may be selected or deselected, so whether it counts
 // toward drift. A child object follows its parent and never counts on its own.
 func IsSelectable(o pipelineobjects.PipelineObject) bool {
@@ -52,7 +62,8 @@ func (m *PipelineObjectsResourceModel) ReadFromObjects(ctx context.Context, remo
 	result := map[string]PipelineObjectModel{}
 
 	for _, o := range remote {
-		prior, inState := m.Objects[o.Name]
+		key := ObjectKey(o)
+		prior, inState := m.Objects[key]
 
 		switch {
 		case inState:
@@ -68,10 +79,10 @@ func (m *PipelineObjectsResourceModel) ReadFromObjects(ctx context.Context, remo
 				current.ExcludedFields = set
 			}
 
-			result[o.Name] = current
+			result[key] = current
 		case !IsSelectable(o):
 		case listed && o.Selected, !listed && !o.Selected:
-			result[o.Name] = PipelineObjectModel{
+			result[key] = PipelineObjectModel{
 				Enabled:        types.BoolValue(o.Selected),
 				LoadMode:       types.StringNull(),
 				ExcludedFields: types.SetNull(types.StringType),

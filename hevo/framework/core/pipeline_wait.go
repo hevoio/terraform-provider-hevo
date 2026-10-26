@@ -54,6 +54,25 @@ func WaitForPipeline(ctx context.Context, client *hevo.Client, pipelineID int64)
 	}
 }
 
+// WaitUntil calls check until it reports done or fails, backing off like WaitForPipeline. Bound it
+// with a deadline on ctx.
+func WaitUntil(ctx context.Context, what string, check func(context.Context) (bool, error)) error {
+	wait := PollInterval
+
+	for {
+		done, err := check(ctx)
+		if err != nil || done {
+			return err
+		}
+
+		if err := sleep(ctx, wait); err != nil {
+			return fmt.Errorf("gave up waiting for %s: %w", what, err)
+		}
+
+		wait = min(wait*2, maxPollInterval)
+	}
+}
+
 // RetryOnConflict calls fn until it succeeds or fails with something other than a 409, backing
 // off like WaitForPipeline. A 409 means the Pipeline is mid-transition or has an edit open in the
 // Hevo UI, and the call was not applied, so repeating it is safe.

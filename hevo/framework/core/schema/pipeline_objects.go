@@ -45,8 +45,9 @@ func PipelineObjectsResourceSchema(ctx context.Context) schema.Schema {
 			},
 			"objects": schema.MapNestedAttribute{
 				Optional: true,
-				Description: "Objects keyed by name, as the Pipeline lists them (for example `public.orders`). " +
-					"A child object follows its parent; name only the parent.",
+				Description: "Objects keyed by fully qualified name, as the Pipeline lists them in " +
+					"`fully_qualified_name` (for example `public.orders`). A child object follows its parent; name " +
+					"only the parent.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"enabled": schema.BoolAttribute{

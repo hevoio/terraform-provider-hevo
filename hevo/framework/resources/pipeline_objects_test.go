@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 
@@ -30,6 +31,10 @@ type fakeObjects struct {
 	objects   map[string]*fakeObject
 	lastPatch map[string]any
 	patches   int
+	// lagReads delays a selection: it shows on the objects only after this many reads.
+	lagReads int
+	pending  map[string]any
+	reads    int
 }
 
 func newFakeObjects() *fakeObjects {
@@ -75,6 +80,16 @@ func (f *fakeObjects) register(t *testing.T, client *sdkmock.HTTPClient) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 
+		f.reads++
+		if f.pending != nil {
+			if f.lagReads > 0 {
+				f.lagReads--
+			} else {
+				f.applySelection(f.pending)
+				f.pending = nil
+			}
+		}
+
 		items := []map[string]any{}
 
 		for name, o := range f.objects {
@@ -84,7 +99,7 @@ func (f *fakeObjects) register(t *testing.T, client *sdkmock.HTTPClient) {
 			}
 
 			items = append(items, map[string]any{
-				"name": name, "status": o.status, "selected": o.selected, "parent_object": o.parent,
+				"fully_qualified_name": name, "name": name[strings.Index(name, ".")+1:], "status": o.status, "selected": o.selected, "parent_object": o.parent,
 				"load_mode": o.loadMode, "fields": fields,
 			})
 		}
@@ -101,7 +116,12 @@ func (f *fakeObjects) register(t *testing.T, client *sdkmock.HTTPClient) {
 		body := decode(t, req)
 		f.lastPatch = body
 		f.patches++
-		f.applySelection(body)
+
+		if f.lagReads > 0 {
+			f.pending = body
+		} else {
+			f.applySelection(body)
+		}
 
 		return sdkmock.NewResponse(req, http.StatusAccepted, `{"code": "Accepted", "data": {"id": 42, "state": "Disabled"}}`), nil
 	})
@@ -293,6 +313,37 @@ func TestPipelineObjectsResourceImportMock(t *testing.T) {
 				// Removing the resource leaves the selection as it is.
 				Config: mock.ProviderConfig,
 				Check:  expectSelected(fake, "public.orders"),
+			},
+		},
+	})
+}
+
+func TestPipelineObjectsResourceWaitsForTheSelectionMock(t *testing.T) {
+	t.Parallel()
+
+	client, factories := mock.NewProvider()
+	fake := newFakeObjects()
+	fake.lagReads = 2
+	fake.register(t, client)
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{
+				// The selection shows only on the third read; create must not return before it.
+				Config: objectsConfig("listed", `
+    "public.orders" = {}
+`),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					expectSelected(fake, "public.orders"),
+					func(*terraformState) error {
+						if fake.reads < 3 {
+							return fmt.Errorf("objects read %d times, want at least 3", fake.reads)
+						}
+
+						return nil
+					},
+				),
 			},
 		},
 	})

@@ -145,7 +145,42 @@ func (r *pipelineObjects) apply(
 
 	if _, err := core.WaitForPipeline(ctx, r.GetClient(), id); err != nil {
 		diags.AddError("The object selection did not finish applying", err.Error())
+
+		return
 	}
+
+	// On a disabled Pipeline the selection lands a little after the request returns, with no
+	// transitional state to wait on, so wait until the objects show it.
+	err = core.WaitUntil(ctx, "the object selection to apply", func(ctx context.Context) (bool, error) {
+		objects, err := r.listObjects(ctx, id)
+		if err != nil {
+			return false, err
+		}
+
+		return selectionApplied(plan, objects), nil
+	})
+	if err != nil {
+		diags.AddError("The object selection did not finish applying", err.Error())
+	}
+}
+
+// selectionApplied reports whether every object the plan names has the selection it asks for.
+// Objects the plan does not name are left to the selection mode and not checked, since Hevo
+// skips those it cannot select.
+func selectionApplied(plan model.PipelineObjectsResourceModel, objects []pipelineobjects.PipelineObject) bool {
+	selected := make(map[string]bool, len(objects))
+	for _, o := range objects {
+		selected[model.ObjectKey(o)] = o.Selected
+	}
+
+	for name, object := range plan.Objects {
+		want := object.Enabled.IsNull() || object.Enabled.ValueBool()
+		if got, ok := selected[name]; ok && got != want {
+			return false
+		}
+	}
+
+	return true
 }
 
 // selections builds one entry per object to send. Under "listed" (EXCLUDE_ALL) every enabled
