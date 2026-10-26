@@ -8,7 +8,7 @@ require (
 	github.com/hashicorp/terraform-plugin-framework-validators v0.19.0
 	github.com/hashicorp/terraform-plugin-go v0.31.0
 	github.com/hashicorp/terraform-plugin-testing v1.16.0
-	github.com/hevoio/hevo-go v0.0.0-20261025213424-db9bca3d0cd1
+	github.com/hevoio/hevo-go v0.0.0-20261025214207-1f0d4a2d506f
 )
 
 require (
