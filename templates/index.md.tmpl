@@ -1,0 +1,24 @@
+---
+page_title: "Provider: Hevo"
+description: |-
+  Manage Hevo Pipelines, Destinations and their objects as code.
+---
+
+# Hevo Provider
+
+The Hevo provider manages [Hevo](https://hevodata.com) Pipelines, Destinations and the objects
+each Pipeline replicates, through Hevo's API. It works with Terraform and OpenTofu.
+
+## Example Usage
+
+{{ tffile "examples/provider/provider.tf" }}
+
+## Authentication
+
+The provider authenticates with your team's API access key and secret key. Set them in the
+`HEVO_ACCESS_KEY` and `HEVO_SECRET_KEY` environment variables rather than in configuration.
+
+Set `region` to your team's Hevo region, or `HEVO_REGION`. Use `host` (or `HEVO_HOST`) only for a
+host that is not a region.
+
+{{ .SchemaMarkdown | trimspace }}
