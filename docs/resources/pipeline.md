@@ -13,21 +13,25 @@ A Pipeline: replicates a Source, created with it, into a Destination. A new Pipe
 ## Example Usage
 
 ```terraform
-resource "hevo_pipeline" "hubspot" {
-  name                = "HubSpot to Snowflake"
-  source_name         = "HubSpot"
-  source_connector_id = "hubspot"
+resource "hevo_pipeline" "postgres" {
+  name                = "Postgres to Snowflake"
+  source_name         = "Postgres"
+  source_connector_id = "SOURCE_CONNECTOR_POSTGRES"
 
   # Keys and value types follow the connector's schema:
-  # data "hevo_connector_metadata" with kind = "source" and connector_id = "hubspot".
+  # data "hevo_connector_metadata" with kind = "source" and connector_id = "SOURCE_CONNECTOR_POSTGRES".
   source_config = {
-    authentication_method    = "PRIVATE_APP_TOKEN"
-    account_id               = 12345678
-    private_app_access_token = var.hubspot_token
+    database_host     = "db.acme.internal"
+    database_port     = 5432
+    database_name     = "shop"
+    database_user     = "hevo"
+    database_password = var.postgres_password
+    publication_key   = "hevo_publication"
+    replication_slot  = "hevo_slot"
   }
 
   destination_id     = hevo_destination.snowflake.id
-  destination_prefix = "hubspot_"
+  destination_prefix = "shop_"
   replication_type   = "HISTORICAL_AND_INCREMENTAL"
   load_mode          = "MERGE"
   schema_evolution   = "ALLOW_ALL"
@@ -41,6 +45,12 @@ resource "hevo_pipeline" "hubspot" {
     object_failure_level     = "PARTIAL"
     object_failure_threshold = 5
   }
+}
+
+# Credentials come from a sensitive variable, so plans show them as (sensitive value).
+variable "postgres_password" {
+  type      = string
+  sensitive = true
 }
 ```
 
@@ -57,8 +67,8 @@ resource "hevo_pipeline" "hubspot" {
 - `replication_type` (String) `HISTORICAL_AND_INCREMENTAL` or `INCREMENTAL_ONLY`. Changing it replaces the Pipeline, and the new Pipeline loads all historical data again.
 - `schedule` (Attributes) When the Pipeline ingests. (see [below for nested schema](#nestedatt--schedule))
 - `schema_evolution` (String) `ALLOW_ALL` replicates new objects and fields as they appear; `BLOCK_ALL` does not.
-- `source_config` (Dynamic) The Source's settings, as the connector's schema in `hevo_connector_metadata` names them. Hevo does not return a Source's settings, so changes made outside Terraform are not detected; a change here is sent as is, and Hevo tests the connection. After an import, the first apply records it without sending it.
-- `source_connector_id` (String) The source connector, for example `hubspot`. List them with the `hevo_connectors` data source. Changing it replaces the Pipeline, and the new Pipeline loads all historical data again.
+- `source_config` (Dynamic) The Source's settings, as the connector's schema in `hevo_connector_metadata` names them. Hevo does not return a Source's settings, so changes made outside Terraform are not detected; a change here is sent as is, and Hevo tests the connection. After an import, the first apply records it without sending it. Pass credentials through a variable declared `sensitive = true` so plans show them as `(sensitive value)`.
+- `source_connector_id` (String) The source connector, for example `SOURCE_CONNECTOR_POSTGRES`. List them with the `hevo_connectors` data source. Changing it replaces the Pipeline, and the new Pipeline loads all historical data again.
 - `source_name` (String) The Source's display name, unique within the team.
 
 ### Optional
@@ -74,7 +84,7 @@ resource "hevo_pipeline" "hubspot" {
 - `disabled` (Boolean) Whether the Pipeline is paused. Change it with `hevo_pipeline_state`.
 - `health` (String) The Pipeline's health, for example `HEALTHY` or `NEEDS_ATTENTION`.
 - `id` (String) The Pipeline's id.
-- `source_type` (String) The source type, for example `HUBSPOT`.
+- `source_type` (String) The source type, for example `POSTGRES`.
 - `state` (String) The Pipeline's state as the Hevo UI shows it, for example `Disabled` or `Initialized`.
 - `updated_at` (String) When the Pipeline was last changed, in RFC 3339.
 - `updated_by` (String) Who last changed the Pipeline.
@@ -134,5 +144,5 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 # Import a Pipeline by its numeric id. Hevo does not return a Source's settings: write
 # source_config (and source_auth for an OAuth app) in the configuration. The next apply records
 # source_config as written without sending it, and sends source_auth.
-terraform import hevo_pipeline.hubspot 42
+terraform import hevo_pipeline.postgres 42
 ```

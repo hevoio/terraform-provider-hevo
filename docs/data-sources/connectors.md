@@ -31,7 +31,7 @@ output "destination_connector_ids" {
 
 ### Optional
 
-- `type` (String) Keep only the source connector of this type, for example `HUBSPOT`. Sources only.
+- `type` (String) Keep only the source connector of this type, for example `POSTGRES`. Sources only.
 
 ### Read-Only
 
@@ -42,9 +42,9 @@ output "destination_connector_ids" {
 
 Read-Only:
 
-- `connector_id` (String) The connector's id, as `connector_id` takes it, for example `hubspot`.
+- `connector_id` (String) The connector's id, as `connector_id` takes it, for example `SOURCE_CONNECTOR_POSTGRES`.
 - `description` (String) What the connector connects to.
 - `display_name` (String) The connector's name in the Hevo UI.
 - `documentation_url` (String) The connector's documentation.
 - `in_beta` (Boolean) Whether the connector is in beta.
-- `type` (String) The connector's type, for example `HUBSPOT`.
+- `type` (String) The connector's type, for example `POSTGRES`.

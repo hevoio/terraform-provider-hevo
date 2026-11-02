@@ -150,9 +150,10 @@ func (r *pipelineObjects) apply(
 	}
 
 	// On a disabled Pipeline the selection lands a little after the request returns, with no
-	// transitional state to wait on, so wait until the objects show it.
+	// transitional state to wait on, so wait until the objects show it. Each poll lists the
+	// selectable objects instead of reading every named one, to stay within the API's rate limits.
 	err = core.WaitUntil(ctx, "the object selection to apply", func(ctx context.Context) (bool, error) {
-		objects, err := r.listObjects(ctx, id)
+		objects, err := r.readObjects(ctx, id, plan.Objects)
 		if err != nil {
 			return false, err
 		}
@@ -272,7 +273,7 @@ func (r *pipelineObjects) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	objects, err := r.listObjects(ctx, id)
+	objects, err := r.readObjects(ctx, id, state.Objects)
 	if hevo.IsNotFound(err) {
 		// The Pipeline is gone, and its objects with it.
 		resp.State.RemoveResource(ctx)
@@ -290,12 +291,85 @@ func (r *pipelineObjects) Read(ctx context.Context, req resource.ReadRequest, re
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-func (r *pipelineObjects) listObjects(ctx context.Context, pipelineID int64) ([]pipelineobjects.PipelineObject, error) {
+// readObjects returns what Read needs: the objects state names, plus every object that can still be
+// selected or deselected, so one changed outside Terraform shows as drift. It never lists a
+// source's other objects, which can number in the tens of thousands.
+func (r *pipelineObjects) readObjects(
+	ctx context.Context,
+	pipelineID int64,
+	named map[string]model.PipelineObjectModel,
+) ([]pipelineobjects.PipelineObject, error) {
+	selectable, err := r.selectableObjects(ctx, pipelineID)
+	if err != nil {
+		return nil, err
+	}
+
+	byKey := make(map[string]pipelineobjects.PipelineObject, len(selectable)+len(named))
+	for _, o := range selectable {
+		byKey[model.ObjectKey(o)] = o
+	}
+
+	missing := map[string]model.PipelineObjectModel{}
+
+	for name, object := range named {
+		if _, ok := byKey[name]; !ok {
+			missing[name] = object
+		}
+	}
+
+	fetched, err := r.namedObjects(ctx, pipelineID, missing)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, o := range fetched {
+		byKey[model.ObjectKey(o)] = o
+	}
+
+	all := make([]pipelineobjects.PipelineObject, 0, len(byKey))
+	for _, o := range byKey {
+		all = append(all, o)
+	}
+
+	return all, nil
+}
+
+// namedObjects reads each named object by its fully qualified name; one Hevo no longer has is left
+// out, so it shows as drift.
+func (r *pipelineObjects) namedObjects(
+	ctx context.Context,
+	pipelineID int64,
+	named map[string]model.PipelineObjectModel,
+) ([]pipelineobjects.PipelineObject, error) {
+	objects := make([]pipelineobjects.PipelineObject, 0, len(named))
+
+	for name := range named {
+		resp, err := r.GetClient().GetPipelineObject().PipelineID(pipelineID).ObjectName(name).Do(ctx)
+		if hevo.IsNotFound(err) {
+			continue
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		objects = append(objects, resp.Data)
+	}
+
+	return objects, nil
+}
+
+// selectableObjects lists the objects whose selection can change, filtered by status on the
+// server.
+func (r *pipelineObjects) selectableObjects(ctx context.Context, pipelineID int64) ([]pipelineobjects.PipelineObject, error) {
 	all := []pipelineobjects.PipelineObject{}
 	cursor := ""
 
 	for {
-		call := r.GetClient().ListPipelineObjects().PipelineID(pipelineID).Limit(objectsPageLimit)
+		call := r.GetClient().ListPipelineObjects().
+			PipelineID(pipelineID).
+			Limit(objectsPageLimit).
+			Statuses(model.SelectableObjectStatuses...)
 		if cursor != "" {
 			call.Cursor(cursor)
 		}

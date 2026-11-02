@@ -98,8 +98,7 @@ func TestProviderConfigureRequiresKeys(t *testing.T) {
 func TestProviderConfigureReadsEnvironment(t *testing.T) {
 	t.Setenv(EnvAccessKey, "env-key")
 	t.Setenv(EnvSecretKey, "env-secret")
-	t.Setenv(EnvRegion, "eu")
-	t.Setenv(EnvHost, "")
+	t.Setenv(EnvHost, "https://eu.hevodata.com")
 
 	resp := configure(t, HevoProvider("test")(), nil)
 	if resp.Diagnostics.HasError() {
@@ -112,8 +111,25 @@ func TestProviderConfigureReadsEnvironment(t *testing.T) {
 	}
 }
 
-func TestProviderConfigureHostWinsOverEnvironmentRegion(t *testing.T) {
-	t.Setenv(EnvRegion, "eu")
+func TestProviderConfigureDefaultsToUSHost(t *testing.T) {
+	t.Setenv(EnvHost, "")
+
+	resp := configure(t, HevoProvider("test")(), map[string]tftypes.Value{
+		"access_key": str("key"),
+		"secret_key": str("secret"),
+	})
+	if resp.Diagnostics.HasError() {
+		t.Fatal(resp.Diagnostics)
+	}
+
+	data := providerData(t, resp)
+	if got := data.Client.HTTPService().BaseURL; got != "https://us.hevodata.com" {
+		t.Errorf("BaseURL = %q, want the us host", got)
+	}
+}
+
+func TestProviderConfigureHostWinsOverEnvironment(t *testing.T) {
+	t.Setenv(EnvHost, "https://eu.hevodata.com")
 
 	resp := configure(t, HevoProvider("test")(), map[string]tftypes.Value{
 		"access_key": str("key"),
@@ -127,6 +143,21 @@ func TestProviderConfigureHostWinsOverEnvironmentRegion(t *testing.T) {
 	data := providerData(t, resp)
 	if got := data.Client.HTTPService().BaseURL; got != "http://localhost:9080" {
 		t.Errorf("BaseURL = %q, want the host", got)
+	}
+}
+
+func TestProviderConfigureRejectsInvalidHost(t *testing.T) {
+	t.Setenv(EnvHost, "")
+
+	for _, host := range []string{"eu.hevodata.com", "ftp://eu.hevodata.com", "https://"} {
+		resp := configure(t, HevoProvider("test")(), map[string]tftypes.Value{
+			"access_key": str("key"),
+			"secret_key": str("secret"),
+			"host":       str(host),
+		})
+		if !resp.Diagnostics.HasError() {
+			t.Errorf("host %q was accepted", host)
+		}
 	}
 }
 

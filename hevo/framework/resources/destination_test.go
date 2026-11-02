@@ -39,6 +39,8 @@ type fakeDestinations struct {
 	pipelinesLoading bool
 	deleteConflicts  int
 	patches          int
+	failCreate       int  // the status the next create answers with instead of 200
+	createdAnyway    bool // whether that failed create still made the Destination
 }
 
 func (f *fakeDestinations) setConfig(key string, value any) {
@@ -95,7 +97,26 @@ func (f *fakeDestinations) register(t *testing.T, client *sdkmock.HTTPClient) {
 		f.exists, f.name = true, name
 		f.config, _ = body["config"].(map[string]any)
 
+		if f.failCreate != 0 {
+			status := f.failCreate
+			f.failCreate, f.exists = 0, f.createdAnyway
+
+			return sdkmock.NewResponse(req, status, `{"code": "GATEWAY_TIMEOUT", "message": "Gateway timeout."}`), nil
+		}
+
 		return f.response(req, http.StatusOK, "Success"), nil
+	})
+
+	client.When(http.MethodGet, "/api/v2/destinations").ThenCall(func(req *http.Request) (*http.Response, error) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		data := "[]"
+		if f.exists {
+			data = fmt.Sprintf(`[{"id": 7, "name": %q, "connector_id": "snowflake", "type": "SNOWFLAKE", "status": "CREATED"}]`, f.name)
+		}
+
+		return sdkmock.NewResponse(req, http.StatusOK, `{"code": "Success", "has_more": false, "data": `+data+`}`), nil
 	})
 
 	client.When(http.MethodGet, "/api/v2/destinations/7").ThenCall(func(req *http.Request) (*http.Response, error) {

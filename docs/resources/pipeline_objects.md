@@ -14,14 +14,16 @@ The Source objects a Pipeline replicates, as a desired set: with `select = "list
 
 ```terraform
 # Replicate exactly these three tables; anything else selected in the Hevo UI shows as drift.
+# Keys are fully qualified names (database.schema.table for Postgres): list them with the
+# hevo_pipeline_objects data source.
 resource "hevo_pipeline_objects" "postgres" {
   pipeline_id = hevo_pipeline.postgres.id
   select      = "listed"
 
   objects = {
-    "public.orders"   = {}
-    "public.payments" = { load_mode = "APPEND" }
-    "public.users"    = { excluded_fields = ["ssn", "date_of_birth"] }
+    "shop.public.orders"   = {}
+    "shop.public.payments" = { load_mode = "APPEND" }
+    "shop.public.users"    = { excluded_fields = ["ssn", "date_of_birth"] }
   }
 }
 ```
@@ -36,7 +38,7 @@ resource "hevo_pipeline_objects" "postgres" {
 
 ### Optional
 
-- `objects` (Attributes Map) Objects keyed by fully qualified name, as the Pipeline lists them in `fully_qualified_name` (for example `public.orders`). A child object follows its parent; name only the parent. (see [below for nested schema](#nestedatt--objects))
+- `objects` (Attributes Map) Objects keyed by fully qualified name, as the `hevo_pipeline_objects` data source lists them: `database.schema.table` for a Postgres source (for example `shop.public.orders`). A child object follows its parent; name only the parent. (see [below for nested schema](#nestedatt--objects))
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
 
 ### Read-Only

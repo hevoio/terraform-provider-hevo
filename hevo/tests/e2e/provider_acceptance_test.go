@@ -25,7 +25,7 @@ func preCheck(t *testing.T) {
 		}
 	}
 
-	if os.Getenv(framework.EnvHost) == "" && os.Getenv(framework.EnvRegion) == "" {
-		t.Fatalf("one of %s or %s must be set for acceptance tests", framework.EnvHost, framework.EnvRegion)
+	if os.Getenv(framework.EnvHost) == "" {
+		t.Fatalf("%s must be set for acceptance tests", framework.EnvHost)
 	}
 }

@@ -3,17 +3,16 @@ package framework
 
 import (
 	"context"
+	"net/url"
 	"os"
-	"strings"
+	"strconv"
 	"sync"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hevoio/hevo-go"
 	httputils "github.com/hevoio/hevo-go/http_utils"
@@ -27,7 +26,6 @@ import (
 const (
 	EnvAccessKey = "HEVO_ACCESS_KEY"
 	EnvSecretKey = "HEVO_SECRET_KEY" //nolint:gosec // the name of an environment variable, not a secret
-	EnvRegion    = "HEVO_REGION"
 	EnvHost      = "HEVO_HOST"
 )
 
@@ -41,7 +39,6 @@ type hevoProvider struct {
 type hevoProviderModel struct {
 	AccessKey              types.String `tfsdk:"access_key"`
 	SecretKey              types.String `tfsdk:"secret_key"`
-	Region                 types.String `tfsdk:"region"`
 	Host                   types.String `tfsdk:"host"`
 	SkipPlanTimeValidation types.Bool   `tfsdk:"skip_plan_time_validation"`
 }
@@ -78,19 +75,11 @@ func (p *hevoProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 				Sensitive:   true,
 				Description: "The team's API secret key. Defaults to the " + EnvSecretKey + " environment variable.",
 			},
-			"region": schema.StringAttribute{
-				Optional: true,
-				Description: "The Hevo region of the team: one of " + strings.Join(hevo.Regions(), ", ") +
-					". Defaults to the " + EnvRegion + " environment variable, then us.",
-				Validators: []validator.String{
-					stringvalidator.OneOf(hevo.Regions()...),
-					stringvalidator.ConflictsWith(path.MatchRoot("host")),
-				},
-			},
 			"host": schema.StringAttribute{
 				Optional: true,
-				Description: "The API host, used instead of region, for example http://localhost:9080. Defaults to " +
-					"the " + EnvHost + " environment variable.",
+				Description: "Your team's Hevo API host: the address you use Hevo at, for example " +
+					"`https://eu.hevodata.com`. Defaults to the " + EnvHost + " environment variable, then " +
+					"`https://us.hevodata.com`.",
 			},
 			"skip_plan_time_validation": schema.BoolAttribute{
 				Optional: true,
@@ -113,7 +102,6 @@ func (p *hevoProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 	settings := map[string]types.String{
 		"access_key": data.AccessKey,
 		"secret_key": data.SecretKey,
-		"region":     data.Region,
 		"host":       data.Host,
 	}
 	for name, value := range settings {
@@ -144,13 +132,14 @@ func (p *hevoProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 	client := hevo.New(accessKey, secretKey)
 
 	if host := valueOrEnv(data.Host, EnvHost); host != "" {
-		client.BaseURL(host)
-	} else if region := valueOrEnv(data.Region, EnvRegion); region != "" {
-		if err := client.Region(region); err != nil {
-			resp.Diagnostics.AddAttributeError(path.Root("region"), "Unknown region", err.Error())
+		if u, err := url.Parse(host); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			resp.Diagnostics.AddAttributeError(path.Root("host"), "Invalid host",
+				"Expected a URL such as https://eu.hevodata.com, got "+strconv.Quote(host)+".")
 
 			return
 		}
+
+		client.BaseURL(host)
 	}
 
 	if p.mockClient != nil {
@@ -186,6 +175,7 @@ func (p *hevoProvider) DataSources(_ context.Context) []func() datasource.DataSo
 		datasources.Pipeline,
 		datasources.Pipelines,
 		datasources.PipelineJobs,
+		datasources.PipelineObjects,
 	}
 }
 

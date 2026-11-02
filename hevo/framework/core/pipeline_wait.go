@@ -73,10 +73,18 @@ func WaitUntil(ctx context.Context, what string, check func(context.Context) (bo
 	}
 }
 
+// ConflictRetryWait bounds how long RetryOnConflict repeats a call that keeps getting a 409. Unit
+// tests shorten it.
+var ConflictRetryWait = 5 * time.Minute
+
 // RetryOnConflict calls fn until it succeeds or fails with something other than a 409, backing
-// off like WaitForPipeline. A 409 means the Pipeline is mid-transition or has an edit open in the
-// Hevo UI, and the call was not applied, so repeating it is safe.
+// off like WaitForPipeline. A 409 means the Pipeline is mid-transition or has an edit open, and the
+// call was not applied, so repeating it is safe. An edit left open never clears, so after
+// ConflictRetryWait the last 409 is returned as the API sent it.
 func RetryOnConflict(ctx context.Context, fn func(context.Context) error) error {
+	waitCtx, cancel := context.WithTimeout(ctx, ConflictRetryWait)
+	defer cancel()
+
 	wait := PollInterval
 
 	for {
@@ -85,8 +93,8 @@ func RetryOnConflict(ctx context.Context, fn func(context.Context) error) error 
 			return err
 		}
 
-		if waitErr := sleep(ctx, wait); waitErr != nil {
-			return fmt.Errorf("%w (gave up waiting: %w)", err, waitErr)
+		if sleep(waitCtx, wait) != nil {
+			return err
 		}
 
 		wait = min(wait*2, maxPollInterval)

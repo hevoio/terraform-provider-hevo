@@ -12,7 +12,7 @@ install:
 test:
 	go test -race -shuffle=on ./...
 
-## testacc: acceptance tests against a real account; needs HEVO_ACCESS_KEY, HEVO_SECRET_KEY and HEVO_HOST or HEVO_REGION
+## testacc: acceptance tests against a real account; needs HEVO_ACCESS_KEY, HEVO_SECRET_KEY and HEVO_HOST
 testacc:
 	TF_ACC=1 go test -count=1 -timeout 120m ./hevo/tests/e2e/...
 

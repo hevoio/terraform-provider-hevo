@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- Provider block: `access_key`, `secret_key`, `region` or `host` (or the `HEVO_*` environment
+- Provider block: `access_key`, `secret_key`, `host` (or the `HEVO_*` environment
   variables), and `skip_plan_time_validation`.
 - `hevo_destination` resource: create, update in place (only changed `config` keys are sent),
   import by id, drift detection on the `config` keys you set, plan-time validation against the
@@ -29,3 +29,6 @@ All notable changes to this project are documented here. The format follows
   it to settle. Removing it leaves the Pipeline as it is.
 - `hevo_pipeline_jobs` data source: a Pipeline's newest jobs with their counts, filtered by
   status and type, or one job with what it did for each object.
+- `hevo_destination` and `hevo_pipeline`: when a create fails with a timeout, a network error or a
+  5xx, the provider looks the resource up by its name and, if Hevo created it anyway, records it in
+  state with a warning instead of leaving it unmanaged.

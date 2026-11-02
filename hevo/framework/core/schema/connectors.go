@@ -29,7 +29,7 @@ func ConnectorsDatasourceSchema() schema.Schema {
 			"kind": connectorKindAttribute(),
 			"type": schema.StringAttribute{
 				Optional:    true,
-				Description: "Keep only the source connector of this type, for example `HUBSPOT`. Sources only.",
+				Description: "Keep only the source connector of this type, for example `POSTGRES`. Sources only.",
 			},
 			"connectors": schema.ListNestedAttribute{
 				Computed:    true,
@@ -38,11 +38,11 @@ func ConnectorsDatasourceSchema() schema.Schema {
 					Attributes: map[string]schema.Attribute{
 						"connector_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "The connector's id, as `connector_id` takes it, for example `hubspot`.",
+							Description: "The connector's id, as `connector_id` takes it, for example `SOURCE_CONNECTOR_POSTGRES`.",
 						},
 						"type": schema.StringAttribute{
 							Computed:    true,
-							Description: "The connector's type, for example `HUBSPOT`.",
+							Description: "The connector's type, for example `POSTGRES`.",
 						},
 						"display_name": schema.StringAttribute{
 							Computed:    true,

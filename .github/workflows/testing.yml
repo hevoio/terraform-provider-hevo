@@ -18,13 +18,22 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Build
-        run: go build ./...
-      - name: Unit tests
-        run: go test -race -shuffle=on ./...
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
+      - name: Build
+        run: go build ./...
+      # Unit tests, and acceptance tests against the preview environment.
+      - name: Tests
+        env:
+          TF_ACC: "1"
+          HEVO_HOST: https://preview.hevodata.com
+          HEVO_ACCESS_KEY: ${{ secrets.HEVO_ACCESS_KEY }}
+          HEVO_SECRET_KEY: ${{ secrets.HEVO_SECRET_KEY }}
+          HEVO_E2E_DESTINATION: ${{ secrets.HEVO_E2E_DESTINATION }}
+          HEVO_E2E_PIPELINE: ${{ secrets.HEVO_E2E_PIPELINE }}
+          HEVO_E2E_OBJECTS: ${{ secrets.HEVO_E2E_OBJECTS }}
+        run: go test -race -shuffle=on -timeout 60m ./...
       - name: Docs are current
         run: |
           go generate ./...

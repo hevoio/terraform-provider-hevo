@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -60,10 +61,8 @@ func (r *pipeline) ModifyPlan(ctx context.Context, req resource.ModifyPlanReques
 		return
 	}
 
-	if !req.State.Raw.IsNull() && len(resp.RequiresReplace) > 0 {
-		resp.Diagnostics.AddWarning("The Pipeline will be replaced",
-			"A change to source_connector_id, destination_id, destination_prefix or replication_type creates a new "+
-				"Pipeline. The new Pipeline loads all historical data again, and the old one is deleted.")
+	if !req.State.Raw.IsNull() {
+		warnOnReplacement(ctx, req, resp)
 	}
 
 	if r.GetClient() == nil || r.GetSkipPlanTimeValidation() {
@@ -97,6 +96,33 @@ func (r *pipeline) ModifyPlan(ctx context.Context, req resource.ModifyPlanReques
 	core.ValidateConfig(config, schema, path.Root("source_config"), &resp.Diagnostics)
 }
 
+// replacingAttributes are the attributes whose change creates a new Pipeline.
+var replacingAttributes = []string{"source_connector_id", "destination_id", "destination_prefix", "replication_type"}
+
+// warnOnReplacement warns when the plan changes an attribute that replaces the Pipeline. The
+// attributes' RequiresReplace modifiers are not visible to the resource's ModifyPlan, so the
+// values are compared here.
+func warnOnReplacement(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	var changed []string
+
+	for _, name := range replacingAttributes {
+		var planned, current types.String
+
+		resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root(name), &planned)...)
+		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root(name), &current)...)
+
+		if !planned.IsUnknown() && !planned.Equal(current) {
+			changed = append(changed, name)
+		}
+	}
+
+	if len(changed) > 0 {
+		resp.Diagnostics.AddWarning("The Pipeline will be replaced",
+			"A change to "+strings.Join(changed, ", ")+" creates a new Pipeline. The new Pipeline loads all "+
+				"historical data again, and the old one is deleted.")
+	}
+}
+
 func (r *pipeline) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	if r.GetClient() == nil {
 		core.AddUnconfiguredClientError(&resp.Diagnostics)
@@ -126,13 +152,32 @@ func (r *pipeline) Create(ctx context.Context, req resource.CreateRequest, resp 
 	defer cancel()
 
 	created, err := call.Do(ctx)
-	if err != nil {
-		resp.Diagnostics.AddError("Unable to create Pipeline", err.Error())
+	current := created.Data
 
-		return
+	if err != nil {
+		// The Pipeline may exist although the request failed; recording it keeps it from being orphaned.
+		var found bool
+
+		if core.MayHaveBeenCreated(err) {
+			var cancelRecovery context.CancelFunc
+
+			ctx, cancelRecovery = core.RecoveryContext(ctx)
+			defer cancelRecovery()
+
+			current, found = core.FindCreatedPipeline(ctx, r.GetClient(), plan.Name.ValueString())
+		}
+
+		if !found {
+			resp.Diagnostics.AddError("Unable to create Pipeline", err.Error())
+
+			return
+		}
+
+		resp.Diagnostics.AddWarning("The Pipeline was created although the request failed",
+			fmt.Sprintf("Creating the Pipeline returned %q, but Pipeline %d named %q exists, so Terraform now "+
+				"manages it.", err, current.ID, current.Name))
 	}
 
-	current := created.Data
 	if core.IsTransitionalPipelineState(current.State) {
 		if current, err = core.WaitForPipeline(ctx, r.GetClient(), current.ID); err != nil {
 			resp.Diagnostics.AddError("Pipeline created but not settled", err.Error())

@@ -35,7 +35,7 @@ func PipelineResourceSchema(ctx context.Context) schema.Schema {
 			},
 			"source_connector_id": schema.StringAttribute{
 				Required: true,
-				Description: "The source connector, for example `hubspot`. List them with the `hevo_connectors` data " +
+				Description: "The source connector, for example `SOURCE_CONNECTOR_POSTGRES`. List them with the `hevo_connectors` data " +
 					"source." + replacesPipeline,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
@@ -44,7 +44,8 @@ func PipelineResourceSchema(ctx context.Context) schema.Schema {
 				Description: "The Source's settings, as the connector's schema in `hevo_connector_metadata` names " +
 					"them. Hevo does not return a Source's settings, so changes made outside Terraform are not " +
 					"detected; a change here is sent as is, and Hevo tests the connection. After an import, the " +
-					"first apply records it without sending it.",
+					"first apply records it without sending it. Pass credentials through a variable declared " +
+					"`sensitive = true` so plans show them as `(sensitive value)`.",
 			},
 			"source_auth": schema.DynamicAttribute{
 				Optional:  true,
@@ -84,7 +85,7 @@ func PipelineResourceSchema(ctx context.Context) schema.Schema {
 			"latency_alert":           pipelineLatencyAlertAttribute(),
 			"source_type": schema.StringAttribute{
 				Computed:      true,
-				Description:   "The source type, for example `HUBSPOT`.",
+				Description:   "The source type, for example `POSTGRES`.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"state": schema.StringAttribute{

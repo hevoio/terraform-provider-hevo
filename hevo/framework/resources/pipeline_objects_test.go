@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -35,15 +36,18 @@ type fakeObjects struct {
 	lagReads int
 	pending  map[string]any
 	reads    int
+	lists    int
+	gets     int
 }
 
 func newFakeObjects() *fakeObjects {
 	return &fakeObjects{objects: map[string]*fakeObject{
-		"public.orders": {status: "ACTIVE", loadMode: "MERGE", excluded: map[string]bool{}},
-		"public.users":  {status: "ACTIVE", loadMode: "MERGE", excluded: map[string]bool{}},
-		"public.events": {status: "ACTIVE", loadMode: "MERGE", excluded: map[string]bool{}},
-		"public.items":  {status: "ACTIVE", parent: "public.orders", loadMode: "MERGE", excluded: map[string]bool{}},
-		"public.legacy": {status: "DELETED", loadMode: "MERGE", excluded: map[string]bool{}},
+		"public.orders":  {status: "ACTIVE", loadMode: "MERGE", excluded: map[string]bool{}},
+		"public.users":   {status: "ACTIVE", loadMode: "MERGE", excluded: map[string]bool{}},
+		"public.events":  {status: "ACTIVE", loadMode: "MERGE", excluded: map[string]bool{}},
+		"public.items":   {status: "ACTIVE", parent: "public.orders", loadMode: "MERGE", excluded: map[string]bool{}},
+		"public.legacy":  {status: "DELETED", loadMode: "MERGE", excluded: map[string]bool{}},
+		"public.archive": {status: "INACCESSIBLE", loadMode: "MERGE", excluded: map[string]bool{}},
 	}}
 }
 
@@ -80,34 +84,44 @@ func (f *fakeObjects) register(t *testing.T, client *sdkmock.HTTPClient) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 
-		f.reads++
-		if f.pending != nil {
-			if f.lagReads > 0 {
-				f.lagReads--
-			} else {
-				f.applySelection(f.pending)
-				f.pending = nil
-			}
+		f.tick()
+		f.lists++
+
+		wanted := req.URL.Query()["status"]
+		if len(wanted) == 0 {
+			// A source can have tens of thousands of objects; the provider must never list them all.
+			t.Errorf("objects listed without a status filter: %s", req.URL.RawQuery)
 		}
 
 		items := []map[string]any{}
 
 		for name, o := range f.objects {
-			fields := []map[string]any{}
-			for _, field := range []string{"id", "email", "ssn"} {
-				fields = append(fields, map[string]any{"source_name": field, "selectable": field != "id", "selected": !o.excluded[field]})
-			}
+			item := f.item(name, o)
 
-			items = append(items, map[string]any{
-				"fully_qualified_name": name, "name": name[strings.Index(name, ".")+1:], "status": o.status, "selected": o.selected, "parent_object": o.parent,
-				"load_mode": o.loadMode, "fields": fields,
-			})
+			status, _ := item["status"].(string)
+			if len(wanted) == 0 || slices.Contains(wanted, status) {
+				items = append(items, item)
+			}
 		}
 
 		data, _ := json.Marshal(items)
 
 		return sdkmock.NewResponse(req, http.StatusOK, fmt.Sprintf(`{"code": "Success", "has_more": false, "data": %s}`, data)), nil
 	})
+
+	for name := range f.objects {
+		client.When(http.MethodGet, "/api/v2/pipelines/42/objects/"+name).ThenCall(func(req *http.Request) (*http.Response, error) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+
+			f.tick()
+			f.gets++
+
+			data, _ := json.Marshal(f.item(name, f.objects[name]))
+
+			return sdkmock.NewResponse(req, http.StatusOK, fmt.Sprintf(`{"code": "Success", "data": %s}`, data)), nil
+		})
+	}
 
 	client.When(http.MethodPatch, "/api/v2/pipelines/42/objects").ThenCall(func(req *http.Request) (*http.Response, error) {
 		f.mu.Lock()
@@ -125,6 +139,38 @@ func (f *fakeObjects) register(t *testing.T, client *sdkmock.HTTPClient) {
 
 		return sdkmock.NewResponse(req, http.StatusAccepted, `{"code": "Accepted", "data": {"id": 42, "state": "Disabled"}}`), nil
 	})
+}
+
+// tick counts a read and, once enough reads have passed, applies a delayed selection.
+func (f *fakeObjects) tick() {
+	f.reads++
+	if f.pending != nil {
+		if f.lagReads > 0 {
+			f.lagReads--
+		} else {
+			f.applySelection(f.pending)
+			f.pending = nil
+		}
+	}
+}
+
+// item renders an object as the API returns it: a selectable object reports ACTIVE when selected
+// and INACTIVE when not.
+func (f *fakeObjects) item(name string, o *fakeObject) map[string]any {
+	status := o.status
+	if status == "ACTIVE" && !o.selected {
+		status = "INACTIVE"
+	}
+
+	fields := []map[string]any{}
+	for _, field := range []string{"id", "email", "ssn"} {
+		fields = append(fields, map[string]any{"source_name": field, "selectable": field != "id", "selected": !o.excluded[field]})
+	}
+
+	return map[string]any{
+		"fully_qualified_name": name, "name": name[strings.LastIndex(name, ".")+1:], "status": status,
+		"selected": o.selected, "parent_object": o.parent, "load_mode": o.loadMode, "fields": fields,
+	}
 }
 
 func (f *fakeObjects) applySelection(body map[string]any) {
@@ -339,6 +385,11 @@ func TestPipelineObjectsResourceWaitsForTheSelectionMock(t *testing.T) {
 					func(*terraformState) error {
 						if fake.reads < 3 {
 							return fmt.Errorf("objects read %d times, want at least 3", fake.reads)
+						}
+
+						// Every poll lists the objects; none reads them one by one.
+						if fake.gets != 0 {
+							return fmt.Errorf("objects read one by one %d times, want 0", fake.gets)
 						}
 
 						return nil

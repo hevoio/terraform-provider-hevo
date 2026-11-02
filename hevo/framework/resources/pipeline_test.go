@@ -21,6 +21,7 @@ import (
 
 func TestMain(m *testing.M) {
 	core.PollInterval = time.Millisecond
+	core.CreateRecoveryWait = 200 * time.Millisecond
 
 	os.Exit(m.Run())
 }
@@ -37,6 +38,9 @@ const hubspotSchema = `{"code": "Success", "data": {"connector_id": "hubspot", "
 type fakePipelines struct {
 	mu            sync.Mutex
 	exists        bool
+	failCreate    int  // the status the next create answers with instead of 200
+	createdAnyway bool // whether that failed create still made the Pipeline
+	hiddenLists   int  // lists that miss the Pipeline, as while a create is still finishing
 	pipeline      map[string]any
 	createBody    map[string]any
 	settingsPatch map[string]any
@@ -95,7 +99,30 @@ func (f *fakePipelines) register(t *testing.T, client *sdkmock.HTTPClient) {
 		}
 		f.pipeline["state"] = "Disabled"
 
+		if f.failCreate != 0 {
+			status := f.failCreate
+			f.failCreate, f.exists = 0, f.createdAnyway
+
+			return sdkmock.NewResponse(req, status, `{"code": "GATEWAY_TIMEOUT", "message": "Gateway timeout."}`), nil
+		}
+
 		return f.response(req, http.StatusOK, "Success"), nil
+	})
+
+	client.When(http.MethodGet, "/api/v2/pipelines").ThenCall(func(req *http.Request) (*http.Response, error) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		data := "[]"
+
+		if f.hiddenLists > 0 {
+			f.hiddenLists--
+		} else if f.exists {
+			p, _ := json.Marshal(f.pipeline)
+			data = "[" + string(p) + "]"
+		}
+
+		return sdkmock.NewResponse(req, http.StatusOK, `{"code": "Success", "has_more": false, "data": `+data+`}`), nil
 	})
 
 	client.When(http.MethodGet, "/api/v2/pipelines/42").ThenCall(func(req *http.Request) (*http.Response, error) {

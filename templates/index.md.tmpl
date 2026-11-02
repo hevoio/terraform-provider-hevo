@@ -18,7 +18,16 @@ each Pipeline replicates, through Hevo's API. It works with Terraform and OpenTo
 The provider authenticates with your team's API access key and secret key. Set them in the
 `HEVO_ACCESS_KEY` and `HEVO_SECRET_KEY` environment variables rather than in configuration.
 
-Set `region` to your team's Hevo region, or `HEVO_REGION`. Use `host` (or `HEVO_HOST`) only for a
-host that is not a region.
+Set `host` (or `HEVO_HOST`) to the address you use Hevo at. It defaults to `https://us.hevodata.com`.
+
+| Region | Host |
+|---|---|
+| US | `https://us.hevodata.com` |
+| US2 | `https://us2.hevodata.com` |
+| EU | `https://eu.hevodata.com` |
+| EU2 | `https://eu2.hevodata.com` |
+| India | `https://in.hevodata.com` |
+| Asia | `https://asia.hevodata.com` |
+| Australia | `https://au.hevodata.com` |
 
 {{ .SchemaMarkdown | trimspace }}

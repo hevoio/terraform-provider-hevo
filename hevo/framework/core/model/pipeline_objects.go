@@ -11,8 +11,9 @@ import (
 	pipelineobjects "github.com/hevoio/hevo-go/pipeline_objects"
 )
 
-// Object statuses under which Hevo lets an object be selected or deselected.
-var selectableObjectStatuses = []string{"ACTIVE", "INACTIVE", "RESETTING", "BLOCKED", "INCONSISTENT"}
+// SelectableObjectStatuses are the object statuses under which Hevo lets an object be selected or
+// deselected. Objects in any other status (INACCESSIBLE, DELETED, DISABLED) cannot change.
+var SelectableObjectStatuses = []string{"ACTIVE", "INACTIVE", "RESETTING", "BLOCKED", "INCONSISTENT"}
 
 // PipelineObjectsResourceModel is the Terraform value of hevo_pipeline_objects.
 type PipelineObjectsResourceModel struct {
@@ -43,7 +44,7 @@ func ObjectKey(o pipelineobjects.PipelineObject) string {
 // IsSelectable reports whether an object may be selected or deselected, so whether it counts
 // toward drift. A child object follows its parent and never counts on its own.
 func IsSelectable(o pipelineobjects.PipelineObject) bool {
-	return o.ParentObject == "" && slices.Contains(selectableObjectStatuses, o.Status)
+	return o.ParentObject == "" && slices.Contains(SelectableObjectStatuses, o.Status)
 }
 
 // ReadFromObjects sets Objects from the Pipeline's objects. Each object in state takes its remote

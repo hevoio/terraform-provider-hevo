@@ -38,9 +38,9 @@ data "hevo_pipeline" "orders" {
 - `name` (String) The Pipeline's display name.
 - `replication_type` (String) `HISTORICAL_AND_INCREMENTAL` or `INCREMENTAL_ONLY`.
 - `schema_evolution` (String) `ALLOW_ALL`, `BLOCK_ALL` or `ALLOW_COLUMN_LEVEL`.
-- `source_connector_id` (String) The source connector, for example `hubspot`.
+- `source_connector_id` (String) The source connector, for example `SOURCE_CONNECTOR_POSTGRES`.
 - `source_name` (String) The Source's display name.
-- `source_type` (String) The source type, for example `HUBSPOT`.
+- `source_type` (String) The source type, for example `POSTGRES`.
 - `state` (String) The Pipeline's state, for example `Initialized` or `Disabled`.
 - `sync_type` (String) The schedule: `SCHEDULED` or `ON_DEMAND`.
 - `updated_at` (String) When the Pipeline was last changed, in RFC 3339.

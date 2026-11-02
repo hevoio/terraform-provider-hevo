@@ -20,12 +20,19 @@ resource "hevo_destination" "snowflake" {
   # Keys and value types follow the connector's schema:
   # data "hevo_connector_metadata" with connector_id = "snowflake".
   config = {
-    account_url = "acme.snowflakecomputing.com"
-    warehouse   = "LOAD_WH"
-    database    = "ANALYTICS"
-    username    = "HEVO"
-    password    = var.snowflake_password
+    account_url         = "https://acme.snowflakecomputing.com"
+    warehouse           = "LOAD_WH"
+    database_name       = "ANALYTICS"
+    database_user       = "HEVO"
+    database_password   = var.snowflake_password
+    authentication_type = "BASIC"
   }
+}
+
+# Credentials come from a sensitive variable, so plans show them as (sensitive value).
+variable "snowflake_password" {
+  type      = string
+  sensitive = true
 }
 ```
 
@@ -34,7 +41,7 @@ resource "hevo_destination" "snowflake" {
 
 ### Required
 
-- `config` (Dynamic) The connector's settings, as its schema in the `hevo_connector_metadata` data source names them. Credentials are write-only: Hevo masks them in every read, so the provider keeps the value you set. Only the keys you set are compared for drift.
+- `config` (Dynamic) The connector's settings, as its schema in the `hevo_connector_metadata` data source names them. Credentials are write-only: Hevo masks them in every read, so the provider keeps the value you set. Only the keys you set are compared for drift. Pass credentials through a variable declared `sensitive = true`: Terraform then shows them as `(sensitive value)` in plans. Like every resource attribute, config is stored in state, so keep state encrypted.
 - `connector_id` (String) The destination connector, for example `snowflake`. List them with the `hevo_connectors` data source. Changing it replaces the Destination.
 - `name` (String) The Destination's display name, unique within the team.
 

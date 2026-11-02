@@ -105,14 +105,32 @@ func (r *destination) Create(ctx context.Context, req resource.CreateRequest, re
 		ConnectorID(plan.ConnectorID.ValueString()).
 		Config(config).
 		Do(ctx)
-	if err != nil {
-		resp.Diagnostics.AddError("Unable to create Destination", err.Error())
+	current := created.Data
 
-		return
+	if err != nil {
+		// The Destination may exist although the request failed; recording it keeps it from being orphaned.
+		var found bool
+
+		if core.MayHaveBeenCreated(err) {
+			recoveryCtx, cancel := core.RecoveryContext(ctx)
+			defer cancel()
+
+			current, found = core.FindCreatedDestination(recoveryCtx, r.GetClient(), plan.Name.ValueString())
+		}
+
+		if !found {
+			resp.Diagnostics.AddError("Unable to create Destination", err.Error())
+
+			return
+		}
+
+		resp.Diagnostics.AddWarning("The Destination was created although the request failed",
+			fmt.Sprintf("Creating the Destination returned %q, but Destination %d named %q exists, so Terraform "+
+				"now manages it.", err, current.ID, current.Name))
 	}
 
 	// The planned config is what Terraform expects back; Hevo masks credentials on read anyway.
-	plan.ReadFromResponse(created.Data)
+	plan.ReadFromResponse(current)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 

@@ -20,7 +20,7 @@ terraform {
 }
 
 provider "hevo" {
-  region = "us"
+  host = "https://us.hevodata.com"
 }
 ```
 
