@@ -69,7 +69,7 @@ resource "hevo_pipeline" "p" {
   load_mode               = "MERGE"
   schema_evolution        = "BLOCK_ALL"
   schedule                = { sync_type = "SCHEDULED", frequency_minutes = 60 }
-  failure_handling_policy = { object_failure_level = "PARTIAL" }
+  failure_handling_policy = { object_failure_level = "PARTIAL", object_failure_threshold = 5 }
 }
 
 resource "hevo_pipeline_objects" "o" {

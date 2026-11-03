@@ -40,7 +40,9 @@ func PipelineObjectsResourceSchema(ctx context.Context) schema.Schema {
 			"select": schema.StringAttribute{
 				Required: true,
 				Description: "`listed` replicates only the objects enabled in `objects`; `all` replicates every " +
-					"object except those disabled in `objects`.",
+					"object Hevo can replicate, including ones added to the Source later, except those disabled in " +
+					"`objects`. The plan for `all` does not list the objects it selects; use `listed` to see and " +
+					"control each one.",
 				Validators: []validator.String{stringvalidator.OneOf(SelectAll, SelectListed)},
 			},
 			"objects": schema.MapNestedAttribute{
@@ -64,7 +66,8 @@ func PipelineObjectsResourceSchema(ctx context.Context) schema.Schema {
 						"excluded_fields": schema.SetAttribute{
 							Optional:    true,
 							ElementType: types.StringType,
-							Description: "Fields of this object not to replicate.",
+							Description: "Fields of this object not to replicate. A field removed from the list, or the " +
+								"whole list removed, is replicated again. Changes made in the Hevo UI are not detected.",
 						},
 					},
 				},

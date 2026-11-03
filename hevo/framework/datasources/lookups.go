@@ -88,7 +88,7 @@ func readDestination(ctx context.Context, client *hevo.Client, req datasource.Re
 
 	found, err := client.GetDestination().DestinationID(id).Do(ctx)
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to read Destination", err.Error())
+		resp.Diagnostics.AddError("Unable to read Destination", core.ErrorDetail(err))
 
 		return
 	}
@@ -109,7 +109,7 @@ func readDestinations(ctx context.Context, client *hevo.Client, _ datasource.Rea
 
 		page, err := call.Do(ctx)
 		if err != nil {
-			resp.Diagnostics.AddError("Unable to list Destinations", err.Error())
+			resp.Diagnostics.AddError("Unable to list Destinations", core.ErrorDetail(err))
 
 			return
 		}
@@ -140,7 +140,7 @@ func readPipeline(ctx context.Context, client *hevo.Client, req datasource.ReadR
 
 	found, err := client.GetPipeline().PipelineID(id).Do(ctx)
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to read Pipeline", err.Error())
+		resp.Diagnostics.AddError("Unable to read Pipeline", core.ErrorDetail(err))
 
 		return
 	}
@@ -177,7 +177,7 @@ func readPipelines(ctx context.Context, client *hevo.Client, req datasource.Read
 	for {
 		page, err := listPipelinesCall(client, cursor, states, data.SourceConnectorID.ValueString(), destinationID).Do(ctx)
 		if err != nil {
-			resp.Diagnostics.AddError("Unable to list Pipelines", err.Error())
+			resp.Diagnostics.AddError("Unable to list Pipelines", core.ErrorDetail(err))
 
 			return
 		}

@@ -14,7 +14,9 @@ func PipelineStateResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
 		Description: "Whether a Pipeline replicates or is paused. Kept apart from `hevo_pipeline` so one apply " +
 			"can create the Pipeline, select its objects with `hevo_pipeline_objects`, and then enable it. " +
-			"Removing this resource leaves the Pipeline as it is.",
+			"Set `depends_on` to the Pipeline's `hevo_pipeline_objects`, as in the example: Hevo rejects an " +
+			"objects change made while the Pipeline is being paused, and `depends_on` applies the objects " +
+			"first. Removing this resource leaves the Pipeline as it is.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,

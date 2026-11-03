@@ -34,7 +34,7 @@ resource "hevo_pipeline_objects" "postgres" {
 ### Required
 
 - `pipeline_id` (String) The Pipeline, such as `hevo_pipeline.x.id`.
-- `select` (String) `listed` replicates only the objects enabled in `objects`; `all` replicates every object except those disabled in `objects`.
+- `select` (String) `listed` replicates only the objects enabled in `objects`; `all` replicates every object Hevo can replicate, including ones added to the Source later, except those disabled in `objects`. The plan for `all` does not list the objects it selects; use `listed` to see and control each one.
 
 ### Optional
 
@@ -51,7 +51,7 @@ resource "hevo_pipeline_objects" "postgres" {
 Optional:
 
 - `enabled` (Boolean) Whether the object is replicated. Defaults to true.
-- `excluded_fields` (Set of String) Fields of this object not to replicate.
+- `excluded_fields` (Set of String) Fields of this object not to replicate. A field removed from the list, or the whole list removed, is replicated again. Changes made in the Hevo UI are not detected.
 - `load_mode` (String) This object's load mode, instead of the Pipeline's: `MERGE`, `APPEND` or `HISTORY_TRACKING`.
 
 
@@ -71,6 +71,8 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 
 ```shell
 # Import by the Pipeline's id. The selection is read as select = "listed" with the objects
-# currently selected.
+# currently selected, and each object's load_mode when it differs from the Pipeline's.
+# excluded_fields are not read back: write them in the configuration, and the next apply sends
+# them again, which changes nothing in Hevo.
 terraform import hevo_pipeline_objects.postgres 42
 ```

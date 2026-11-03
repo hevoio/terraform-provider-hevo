@@ -51,6 +51,7 @@ type ConnectorMetadataModel struct {
 	ConnectorID         types.String `tfsdk:"connector_id"`
 	Type                types.String `tfsdk:"type"`
 	DisplayName         types.String `tfsdk:"display_name"`
+	SourceTypes         types.List   `tfsdk:"source_types"`
 	SchemaJSON          types.String `tfsdk:"schema_json"`
 	RequiredConfigKeys  types.List   `tfsdk:"required_config_keys"`
 	WriteOnlyConfigKeys types.List   `tfsdk:"write_only_config_keys"`
@@ -67,8 +68,14 @@ func (m *ConnectorMetadataModel) ReadFromResponse(ctx context.Context, d metadat
 		return diags
 	}
 
+	// A source connector names its variants, and its default, in the schema's type property.
+	variants, defaultType := sourceTypes(d.Schema)
+	if d.Type != "" {
+		defaultType = d.Type
+	}
+
 	m.ConnectorID = types.StringValue(d.ConnectorID)
-	m.Type = types.StringValue(d.Type)
+	m.Type = types.StringValue(defaultType)
 	m.DisplayName = types.StringValue(d.DisplayName)
 	m.SchemaJSON = types.StringValue(string(schemaJSON))
 
@@ -94,8 +101,29 @@ func (m *ConnectorMetadataModel) ReadFromResponse(ctx context.Context, d metadat
 	diags.Append(d2...)
 	m.WriteOnlyConfigKeys, d2 = types.ListValueFrom(ctx, types.StringType, nonNil(writeOnly))
 	diags.Append(d2...)
+	m.SourceTypes, d2 = types.ListValueFrom(ctx, types.StringType, nonNil(variants))
+	diags.Append(d2...)
 
 	return diags
+}
+
+// sourceTypes returns the variants a source connector's schema lists under properties.type, and
+// its default. Destination schemas have none.
+func sourceTypes(schema map[string]any) ([]string, string) {
+	properties, _ := schema["properties"].(map[string]any)
+	typeProperty, _ := properties["type"].(map[string]any)
+	enum, _ := typeProperty["enum"].([]any)
+	defaultType, _ := typeProperty["default"].(string)
+
+	variants := make([]string, 0, len(enum))
+
+	for _, v := range enum {
+		if s, ok := v.(string); ok {
+			variants = append(variants, s)
+		}
+	}
+
+	return variants, defaultType
 }
 
 func nonNil(s []string) []string {

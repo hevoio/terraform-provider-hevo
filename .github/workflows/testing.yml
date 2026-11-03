@@ -23,10 +23,10 @@ jobs:
           terraform_wrapper: false
       - name: Build
         run: go build ./...
-      # Unit tests, and acceptance tests against the preview environment.
+      # Unit tests, and acceptance tests against the preview environment once its key is set.
       - name: Tests
         env:
-          TF_ACC: "1"
+          TF_ACC: ${{ secrets.HEVO_ACCESS_KEY != '' && '1' || '' }}
           HEVO_HOST: https://preview.hevodata.com
           HEVO_ACCESS_KEY: ${{ secrets.HEVO_ACCESS_KEY }}
           HEVO_SECRET_KEY: ${{ secrets.HEVO_SECRET_KEY }}

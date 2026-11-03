@@ -25,7 +25,6 @@ func TestPipelineCreateAdoptsAfterGatewayTimeoutMock(t *testing.T) {
 				Config: pipelineConfig("HubSpot to Snowflake", "60", "pat-1", "MERGE"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("hevo_pipeline.p", "id", "42"),
-					resource.TestCheckResourceAttr("hevo_pipeline.p", "state", "Disabled"),
 				),
 			},
 		},

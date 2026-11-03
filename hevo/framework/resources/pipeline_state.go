@@ -98,7 +98,7 @@ func (r *pipelineState) setPaused(ctx context.Context, timeout time.Duration, pl
 
 	id, err := strconv.ParseInt(plan.PipelineID.ValueString(), 10, 64)
 	if err != nil {
-		diags.AddAttributeError(path.Root("pipeline_id"), "Invalid pipeline_id", err.Error())
+		diags.AddAttributeError(path.Root("pipeline_id"), "Invalid pipeline_id", core.ErrorDetail(err))
 
 		return
 	}
@@ -109,7 +109,7 @@ func (r *pipelineState) setPaused(ctx context.Context, timeout time.Duration, pl
 	// Let an edit still being applied finish, so its transitional state is not mistaken for ours.
 	current, err := core.WaitForPipeline(ctx, r.GetClient(), id)
 	if err != nil {
-		diags.AddError("Unable to read the Pipeline", err.Error())
+		diags.AddError("Unable to read the Pipeline", core.ErrorDetail(err))
 
 		return
 	}
@@ -136,13 +136,13 @@ func (r *pipelineState) setPaused(ctx context.Context, timeout time.Duration, pl
 	}
 
 	if err := core.RetryOnConflict(ctx, send); err != nil {
-		diags.AddError("Unable to "+action+" the Pipeline", err.Error())
+		diags.AddError("Unable to "+action+" the Pipeline", core.ErrorDetail(err))
 
 		return
 	}
 
 	if _, err := core.WaitForPipeline(ctx, r.GetClient(), id); err != nil {
-		diags.AddError("The Pipeline did not finish trying to "+action, err.Error())
+		diags.AddError("The Pipeline did not finish trying to "+action, core.ErrorDetail(err))
 	}
 }
 
@@ -159,7 +159,7 @@ func (r *pipelineState) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	id, err := strconv.ParseInt(state.PipelineID.ValueString(), 10, 64)
 	if err != nil {
-		resp.Diagnostics.AddError("Invalid pipeline_id in state", err.Error())
+		resp.Diagnostics.AddError("Invalid pipeline_id in state", core.ErrorDetail(err))
 	}
 
 	if resp.Diagnostics.HasError() {
@@ -174,7 +174,7 @@ func (r *pipelineState) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to read the Pipeline", err.Error())
+		resp.Diagnostics.AddError("Unable to read the Pipeline", core.ErrorDetail(err))
 
 		return
 	}

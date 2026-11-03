@@ -73,8 +73,7 @@ func (r *destination) ModifyPlan(ctx context.Context, req resource.ModifyPlanReq
 	schema, err := core.GetDestinationConnectorSchema(ctx, r.GetClient(), r.GetMetadataCache(), plan.ConnectorID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddAttributeError(path.Root("connector_id"), "Unable to read the connector's schema",
-			fmt.Sprintf("%v. Set skip_plan_time_validation = true in the provider block to plan without it; "+
-				"config mistakes then surface at apply.", err))
+			core.SchemaReadErrorDetail(err))
 
 		return
 	}
@@ -119,7 +118,7 @@ func (r *destination) Create(ctx context.Context, req resource.CreateRequest, re
 		}
 
 		if !found {
-			resp.Diagnostics.AddError("Unable to create Destination", err.Error())
+			resp.Diagnostics.AddError("Unable to create Destination", core.ErrorDetail(err))
 
 			return
 		}
@@ -151,7 +150,7 @@ func (r *destination) Read(ctx context.Context, req resource.ReadRequest, resp *
 
 	id, err := state.DestinationID()
 	if err != nil {
-		resp.Diagnostics.AddError("Invalid Destination id in state", err.Error())
+		resp.Diagnostics.AddError("Invalid Destination id in state", core.ErrorDetail(err))
 
 		return
 	}
@@ -165,7 +164,7 @@ func (r *destination) Read(ctx context.Context, req resource.ReadRequest, resp *
 	}
 
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to read Destination", err.Error())
+		resp.Diagnostics.AddError("Unable to read Destination", core.ErrorDetail(err))
 
 		return
 	}
@@ -207,7 +206,7 @@ func (r *destination) Update(ctx context.Context, req resource.UpdateRequest, re
 
 	id, err := state.DestinationID()
 	if err != nil {
-		resp.Diagnostics.AddError("Invalid Destination id in state", err.Error())
+		resp.Diagnostics.AddError("Invalid Destination id in state", core.ErrorDetail(err))
 
 		return
 	}
@@ -221,7 +220,7 @@ func (r *destination) Update(ctx context.Context, req resource.UpdateRequest, re
 		hasChange = true
 	}
 
-	if changed := core.ChangedConfig(planConfig, stateConfig); len(changed) > 0 {
+	if changed := r.unchangedInHevoDropped(ctx, id, core.ChangedConfig(planConfig, stateConfig)); len(changed) > 0 {
 		call.Config(changed)
 
 		hasChange = true
@@ -231,7 +230,7 @@ func (r *destination) Update(ctx context.Context, req resource.UpdateRequest, re
 	if hasChange {
 		updated, err := call.Do(ctx)
 		if err != nil {
-			resp.Diagnostics.AddError("Unable to update Destination", err.Error())
+			resp.Diagnostics.AddError("Unable to update Destination", core.ErrorDetail(err))
 
 			return
 		}
@@ -242,6 +241,24 @@ func (r *destination) Update(ctx context.Context, req resource.UpdateRequest, re
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+// unchangedInHevoDropped returns changed without the keys whose values the Destination already
+// has, such as a key added to the configuration with its current value. If the Destination
+// cannot be read, changed is returned as it is and Hevo checks it.
+func (r *destination) unchangedInHevoDropped(ctx context.Context, id int64, changed map[string]any) map[string]any {
+	if len(changed) == 0 {
+		return changed
+	}
+
+	current, err := r.GetClient().GetDestination().DestinationID(id).Do(ctx)
+	if err != nil {
+		return changed
+	}
+
+	schema, _ := core.GetDestinationConnectorSchema(ctx, r.GetClient(), r.GetMetadataCache(), current.Data.ConnectorID)
+
+	return core.WithoutCurrentValues(changed, current.Data.Config, schema)
 }
 
 func (r *destination) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -261,7 +278,7 @@ func (r *destination) Delete(ctx context.Context, req resource.DeleteRequest, re
 
 	id, err := state.DestinationID()
 	if err != nil {
-		resp.Diagnostics.AddError("Invalid Destination id in state", err.Error())
+		resp.Diagnostics.AddError("Invalid Destination id in state", core.ErrorDetail(err))
 
 		return
 	}
@@ -278,9 +295,10 @@ func (r *destination) Delete(ctx context.Context, req resource.DeleteRequest, re
 		return
 	case hevo.IsConflict(err):
 		resp.Diagnostics.AddError("Destination still has Pipelines",
-			err.Error()+"\n\nDelete those Pipelines first, or set force_delete = true on this Destination, "+
-				"apply, and destroy again to delete them with it.")
+			"Delete those Pipelines first, or set force_delete = true on this Destination, apply, and destroy "+
+				"again to delete them with it; force_delete sends the confirm_override that Hevo asks for below.\n\n"+
+				core.ErrorDetail(err))
 	default:
-		resp.Diagnostics.AddError("Unable to delete Destination", err.Error())
+		resp.Diagnostics.AddError("Unable to delete Destination", core.ErrorDetail(err))
 	}
 }

@@ -25,13 +25,8 @@ type PipelineResourceModel struct {
 	FailureHandlingPolicy *FailureHandlingPolicyModel `tfsdk:"failure_handling_policy"`
 	LatencyAlert          *LatencyAlertModel          `tfsdk:"latency_alert"`
 	SourceType            types.String                `tfsdk:"source_type"`
-	State                 types.String                `tfsdk:"state"`
-	Disabled              types.Bool                  `tfsdk:"disabled"`
-	Health                types.String                `tfsdk:"health"`
 	CreatedAt             types.String                `tfsdk:"created_at"`
 	CreatedBy             types.String                `tfsdk:"created_by"`
-	UpdatedAt             types.String                `tfsdk:"updated_at"`
-	UpdatedBy             types.String                `tfsdk:"updated_by"`
 	Timeouts              timeouts.Value              `tfsdk:"timeouts"`
 }
 
@@ -60,8 +55,21 @@ func (m *PipelineResourceModel) PipelineID() (int64, error) {
 
 // ReadFromResponse sets every field the API returns. The Source's config and auth are never
 // returned, so they are left as they are. An optional nested value the user did not set stays
-// null, so the values Hevo fills in do not show as drift.
+// null, so the values Hevo fills in do not show as drift. On import (no name in state), a latency
+// alert is read when Hevo has it on, and a failure threshold only under PARTIAL.
 func (m *PipelineResourceModel) ReadFromResponse(p pipelines.PipelineDetails) {
+	imported := m.Name.IsNull()
+	if imported && p.LatencyAlert.Enabled {
+		m.LatencyAlert = &LatencyAlertModel{ThresholdMinutes: types.Int64Unknown()}
+	}
+
+	// Hevo stores a threshold even for ALL_OR_NONE, where it has no effect; it is imported only
+	// for PARTIAL.
+	threshold := m.failureThreshold()
+	if imported && p.FailureHandlingPolicy.ObjectFailureLevel != "PARTIAL" {
+		threshold = types.Int64Null()
+	}
+
 	m.ID = types.StringValue(strconv.FormatInt(p.ID, 10))
 	m.Name = types.StringValue(p.Name)
 	m.SourceName = types.StringValue(p.Source.Name)
@@ -75,11 +83,11 @@ func (m *PipelineResourceModel) ReadFromResponse(p pipelines.PipelineDetails) {
 
 	m.Schedule = &ScheduleModel{
 		SyncType:         types.StringValue(p.Schedule.SyncType),
-		FrequencyMinutes: keepNullInt64(m.scheduleFrequency(), p.Schedule.FrequencyMinutes),
+		FrequencyMinutes: readFrequency(m.scheduleFrequency(), p.Schedule),
 	}
 	m.FailureHandlingPolicy = &FailureHandlingPolicyModel{
 		ObjectFailureLevel:     types.StringValue(p.FailureHandlingPolicy.ObjectFailureLevel),
-		ObjectFailureThreshold: keepNullInt64(m.failureThreshold(), p.FailureHandlingPolicy.ObjectFailureThreshold),
+		ObjectFailureThreshold: keepNullInt64(threshold, p.FailureHandlingPolicy.ObjectFailureThreshold),
 	}
 
 	if m.LatencyAlert != nil {
@@ -89,13 +97,8 @@ func (m *PipelineResourceModel) ReadFromResponse(p pipelines.PipelineDetails) {
 		}
 	}
 
-	m.State = types.StringValue(p.State)
-	m.Disabled = types.BoolValue(p.Disabled)
-	m.Health = types.StringValue(p.Health.Value)
 	m.CreatedAt = millisToRFC3339(p.CreatedAt)
 	m.CreatedBy = types.StringValue(p.CreatedBy)
-	m.UpdatedAt = millisToRFC3339(p.UpdatedAt)
-	m.UpdatedBy = types.StringValue(p.UpdatedBy)
 }
 
 func (m *PipelineResourceModel) scheduleFrequency() types.Int64 {
@@ -112,6 +115,20 @@ func (m *PipelineResourceModel) failureThreshold() types.Int64 {
 	}
 
 	return m.FailureHandlingPolicy.ObjectFailureThreshold
+}
+
+// readFrequency returns the schedule's frequency. Hevo ignores, and does not return, a frequency
+// sent with ON_DEMAND, so the configured one is kept: it applies again on a switch to SCHEDULED.
+func readFrequency(prior types.Int64, remote pipelines.ScheduleResponse) types.Int64 {
+	if remote.SyncType == "ON_DEMAND" {
+		if prior.IsUnknown() {
+			return types.Int64Null()
+		}
+
+		return prior
+	}
+
+	return keepNullInt64(prior, remote.FrequencyMinutes)
 }
 
 // keepNullInt64 returns null when the prior value was null (the user left it out), else the

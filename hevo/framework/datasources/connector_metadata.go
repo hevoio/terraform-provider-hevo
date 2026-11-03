@@ -69,7 +69,7 @@ func (d *connectorMetadata) Read(ctx context.Context, req datasource.ReadRequest
 	}
 
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to read connector", err.Error())
+		resp.Diagnostics.AddError("Unable to read connector", core.ErrorDetail(err))
 
 		return
 	}

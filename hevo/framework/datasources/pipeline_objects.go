@@ -6,6 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hevoio/hevo-go"
 
+	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core"
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core/model"
 	hevoschema "github.com/hevoio/terraform-provider-hevo/hevo/framework/core/schema"
 )
@@ -41,7 +42,7 @@ func readPipelineObjects(ctx context.Context, client *hevo.Client, req datasourc
 
 		page, err := call.Do(ctx)
 		if err != nil {
-			resp.Diagnostics.AddError("Unable to list the Pipeline's objects", err.Error())
+			resp.Diagnostics.AddError("Unable to list the Pipeline's objects", core.ErrorDetail(err))
 
 			return
 		}

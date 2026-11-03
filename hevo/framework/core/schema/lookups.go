@@ -36,12 +36,34 @@ func pipelineAttributes() map[string]schema.Attribute {
 		"replication_type":    computedString("`HISTORICAL_AND_INCREMENTAL` or `INCREMENTAL_ONLY`."),
 		"load_mode":           computedString("`MERGE`, `APPEND` or `HISTORY_TRACKING`."),
 		"schema_evolution":    computedString("`ALLOW_ALL`, `BLOCK_ALL` or `ALLOW_COLUMN_LEVEL`."),
-		"sync_type":           computedString("The schedule: `SCHEDULED` or `ON_DEMAND`."),
-		"frequency_minutes":   schema.Int64Attribute{Computed: true, Description: "How often a `SCHEDULED` Pipeline ingests."},
-		"created_at":          computedString("When the Pipeline was created, in RFC 3339."),
-		"created_by":          computedString("Who created the Pipeline."),
-		"updated_at":          computedString("When the Pipeline was last changed, in RFC 3339."),
-		"updated_by":          computedString("Who last changed the Pipeline."),
+		"schedule": schema.SingleNestedAttribute{
+			Computed:    true,
+			Description: "When the Pipeline ingests.",
+			Attributes: map[string]schema.Attribute{
+				"sync_type":         computedString("`SCHEDULED` or `ON_DEMAND`."),
+				"frequency_minutes": schema.Int64Attribute{Computed: true, Description: "How often a `SCHEDULED` Pipeline ingests; null for `ON_DEMAND`."},
+			},
+		},
+		"failure_handling_policy": schema.SingleNestedAttribute{
+			Computed:    true,
+			Description: "How many objects may fail before a load fails.",
+			Attributes: map[string]schema.Attribute{
+				"object_failure_level":     computedString("`PARTIAL` or `ALL_OR_NONE`."),
+				"object_failure_threshold": schema.Int64Attribute{Computed: true, Description: "How many objects may fail under `PARTIAL`."},
+			},
+		},
+		"latency_alert": schema.SingleNestedAttribute{
+			Computed:    true,
+			Description: "The alert raised when replication falls behind.",
+			Attributes: map[string]schema.Attribute{
+				"enabled":           schema.BoolAttribute{Computed: true, Description: "Whether the alert is on."},
+				"threshold_minutes": schema.Int64Attribute{Computed: true, Description: "The latency that raises the alert."},
+			},
+		},
+		"created_at": computedString("When the Pipeline was created, in RFC 3339."),
+		"created_by": computedString("Who created the Pipeline."),
+		"updated_at": computedString("When the Pipeline was last changed, in RFC 3339."),
+		"updated_by": computedString("Who last changed the Pipeline."),
 	}
 }
 
@@ -80,7 +102,7 @@ func DestinationsDatasourceSchema() schema.Schema {
 // PipelineDatasourceSchema is the schema of the hevo_pipeline data source.
 func PipelineDatasourceSchema() schema.Schema {
 	return schema.Schema{
-		Description: "Reads one Pipeline.",
+		Description: "Reads one Pipeline: its settings, shaped as in the `hevo_pipeline` resource, and its state and health.",
 		Attributes:  withID(pipelineAttributes(), schema.StringAttribute{Required: true, Description: "The Pipeline's id."}),
 	}
 }

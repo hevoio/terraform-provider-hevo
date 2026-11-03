@@ -33,8 +33,10 @@ func DestinationResourceSchema() schema.Schema {
 				Required: true,
 				Description: "The connector's settings, as its schema in the `hevo_connector_metadata` data source " +
 					"names them. Credentials are write-only: Hevo masks them in every read, so the provider keeps " +
-					"the value you set. Only the keys you set are compared for drift. Pass credentials through a " +
-					"variable declared `sensitive = true`: Terraform then shows them as `(sensitive value)` in plans. " +
+					"the value you set. Only the keys you set are compared for drift. It is not marked sensitive, so " +
+					"that plans show which settings change: a credential written as a literal value is shown in " +
+					"plain text. Pass credentials through a variable declared `sensitive = true`: Terraform then " +
+					"shows them as `(sensitive value)` in plans. " +
 					"Like every resource attribute, config is stored in state, so keep state encrypted.",
 			},
 			"force_delete": schema.BoolAttribute{

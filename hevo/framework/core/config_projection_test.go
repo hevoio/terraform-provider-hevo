@@ -12,12 +12,17 @@ func testSchema() *Property {
 	return &Property{
 		Type:     "object",
 		Required: []string{"host"},
+		// mode A, its default, requires secret.
+		Conditions: []Condition{{When: map[string]any{"mode": "A"}, Required: []string{"secret"}}},
 		Properties: map[string]*Property{
 			"host":     {Type: "string"},
 			"port":     {Type: "integer"},
 			"password": {Type: "string", WriteOnly: true},
 			"external": {Type: "string", ReadOnly: true},
-			"mode":     {Type: "string", Enum: []any{"A", "B"}},
+			"mode":     {Type: "string", Enum: []any{"A", "B"}, Default: "A"},
+			"db":       {Type: "string", Pattern: "^[A-Za-z][A-Za-z0-9_]*$"},
+			"secret":   {Type: "string"},
+			"stage":    {Type: "boolean", Default: false},
 			"ssh": {Type: "object", Properties: map[string]*Property{
 				"host": {Type: "string"},
 				"key":  {Type: "string", WriteOnly: true},
@@ -64,8 +69,18 @@ func TestProjectConfig(t *testing.T) {
 		},
 		{
 			name:     "key gone remotely is null",
-			mask:     map[string]any{"mode": "A"},
+			mask:     map[string]any{"mode": "B"},
 			expected: map[string]any{"mode": nil},
+		},
+		{
+			name:     "key Hevo does not return keeps its default",
+			mask:     map[string]any{"stage": false},
+			expected: map[string]any{"stage": false},
+		},
+		{
+			name:     "key Hevo does not return is null when not its default",
+			mask:     map[string]any{"stage": true},
+			expected: map[string]any{"stage": nil},
 		},
 		{
 			name: "import keeps every key except credentials",
@@ -95,6 +110,18 @@ func TestProjectConfigWithoutSchemaRecognisesMaskedValues(t *testing.T) {
 	got := ProjectConfig(map[string]any{"password": "********"}, map[string]any{"password": "s3cret"}, nil)
 	if got["password"] != "s3cret" {
 		t.Errorf("password = %v, want the local value", got["password"])
+	}
+}
+
+func TestWithoutCurrentValues(t *testing.T) {
+	t.Parallel()
+
+	remote := map[string]any{"host": "a", "port": float64(1), "password": "******"}
+	changed := map[string]any{"host": "a", "port": "2", "password": "x", "stage": false, "mode": "B"}
+
+	expected := map[string]any{"port": "2", "password": "x", "mode": "B"}
+	if got := WithoutCurrentValues(changed, remote, testSchema()); !reflect.DeepEqual(got, expected) {
+		t.Errorf("WithoutCurrentValues() = %v, want %v", got, expected)
 	}
 }
 
@@ -138,13 +165,18 @@ func TestValidateConfig(t *testing.T) {
 		config   map[string]any
 		expected []string
 	}{
-		{name: "valid", config: map[string]any{"host": "h", "port": "5432", "mode": "A", "ssh": map[string]any{"host": "b"}}},
-		{name: "unknown key", config: map[string]any{"host": "h", "hots": "x"}, expected: []string{"Unknown config key"}},
-		{name: "missing required", config: map[string]any{"port": int64(1)}, expected: []string{"Missing required config key"}},
-		{name: "wrong type", config: map[string]any{"host": "h", "port": "five"}, expected: []string{"Wrong config value type"}},
+		{name: "valid", config: map[string]any{"host": "h", "port": "5432", "mode": "A", "secret": "s", "ssh": map[string]any{"host": "b"}}},
+		{name: "required by a condition", config: map[string]any{"host": "h", "mode": "A"}, expected: []string{"Missing required config key"}},
+		{name: "required by a condition through its default", config: map[string]any{"host": "h"}, expected: []string{"Missing required config key"}},
+		{name: "condition not met", config: map[string]any{"host": "h", "mode": "B"}},
+		{name: "pattern", config: map[string]any{"host": "h", "mode": "B", "db": "1-not-valid"}, expected: []string{"Config value does not match the pattern"}},
+		{name: "pattern matched", config: map[string]any{"host": "h", "mode": "B", "db": "HEVO_DB"}},
+		{name: "unknown key", config: map[string]any{"host": "h", "mode": "B", "hots": "x"}, expected: []string{"Unknown config key"}},
+		{name: "missing required", config: map[string]any{"port": int64(1), "mode": "B"}, expected: []string{"Missing required config key"}},
+		{name: "wrong type", config: map[string]any{"host": "h", "mode": "B", "port": "five"}, expected: []string{"Wrong config value type"}},
 		{name: "not allowed", config: map[string]any{"host": "h", "mode": "C"}, expected: []string{"Config value not allowed"}},
-		{name: "read-only", config: map[string]any{"host": "h", "external": "x"}, expected: []string{"Read-only config key"}},
-		{name: "nested unknown", config: map[string]any{"host": "h", "ssh": map[string]any{"hst": "b"}}, expected: []string{"Unknown config key"}},
+		{name: "read-only", config: map[string]any{"host": "h", "mode": "B", "external": "x"}, expected: []string{"Read-only config key"}},
+		{name: "nested unknown", config: map[string]any{"host": "h", "mode": "B", "ssh": map[string]any{"hst": "b"}}, expected: []string{"Unknown config key"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

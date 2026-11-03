@@ -62,7 +62,7 @@ func (d *connectors) Read(ctx context.Context, req datasource.ReadRequest, resp 
 	for {
 		page, err := d.listPage(ctx, data, cursor)
 		if err != nil {
-			resp.Diagnostics.AddError("Unable to list connectors", err.Error())
+			resp.Diagnostics.AddError("Unable to list connectors", core.ErrorDetail(err))
 
 			return
 		}

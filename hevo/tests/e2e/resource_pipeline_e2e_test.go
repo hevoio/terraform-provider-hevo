@@ -50,7 +50,7 @@ resource "hevo_pipeline" "test" {
   load_mode               = "MERGE"
   schema_evolution        = "BLOCK_ALL"
   schedule                = { sync_type = "SCHEDULED", frequency_minutes = %[5]d }
-  failure_handling_policy = { object_failure_level = "PARTIAL" }
+  failure_handling_policy = { object_failure_level = "PARTIAL", object_failure_threshold = 5 }
 }
 `, suffix, spec.SourceConnectorID, string(config), spec.DestinationID, frequency)
 	}
@@ -63,7 +63,6 @@ resource "hevo_pipeline" "test" {
 				Config: hcl(60),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("hevo_pipeline.test", "id"),
-					resource.TestCheckResourceAttr("hevo_pipeline.test", "disabled", "true"),
 				),
 			},
 			{

@@ -3,12 +3,12 @@
 page_title: "hevo_pipeline Resource - hevo"
 subcategory: ""
 description: |-
-  A Pipeline: replicates a Source, created with it, into a Destination. A new Pipeline is created disabled; select its objects with hevo_pipeline_objects and enable it with hevo_pipeline_state. Edits run asynchronously in Hevo; the provider waits for each to be applied.
+  A Pipeline: replicates a Source, created with it, into a Destination. A new Pipeline is created disabled; select its objects with hevo_pipeline_objects and enable it with hevo_pipeline_state. Edits run asynchronously in Hevo; the provider waits for each to be applied. The Pipeline's state, health and last change move as it runs and as hevo_pipeline_state enables it, so they are not part of this resource: read them with the hevo_pipeline data source.
 ---
 
 # hevo_pipeline (Resource)
 
-A Pipeline: replicates a Source, created with it, into a Destination. A new Pipeline is created disabled; select its objects with `hevo_pipeline_objects` and enable it with `hevo_pipeline_state`. Edits run asynchronously in Hevo; the provider waits for each to be applied.
+A Pipeline: replicates a Source, created with it, into a Destination. A new Pipeline is created disabled; select its objects with `hevo_pipeline_objects` and enable it with `hevo_pipeline_state`. Edits run asynchronously in Hevo; the provider waits for each to be applied. The Pipeline's state, health and last change move as it runs and as `hevo_pipeline_state` enables it, so they are not part of this resource: read them with the `hevo_pipeline` data source.
 
 ## Example Usage
 
@@ -62,12 +62,11 @@ variable "postgres_password" {
 - `destination_id` (String) The id of the Destination to load into, such as `hevo_destination.x.id`. Changing it replaces the Pipeline, and the new Pipeline loads all historical data again.
 - `destination_prefix` (String) The prefix of the tables the Pipeline creates in the Destination. Changing it replaces the Pipeline, and the new Pipeline loads all historical data again.
 - `failure_handling_policy` (Attributes) How many objects may fail before a load fails. (see [below for nested schema](#nestedatt--failure_handling_policy))
-- `load_mode` (String) How objects load: `MERGE`, `APPEND` or `HISTORY_TRACKING`.
+- `load_mode` (String) How objects load: `MERGE`, `APPEND` or `HISTORY_TRACKING`. Not every Destination supports every load mode, for example `HISTORY_TRACKING` on Amazon Redshift; Hevo rejects an unsupported one at apply.
 - `name` (String) The Pipeline's display name, unique within the team.
 - `replication_type` (String) `HISTORICAL_AND_INCREMENTAL` or `INCREMENTAL_ONLY`. Changing it replaces the Pipeline, and the new Pipeline loads all historical data again.
 - `schedule` (Attributes) When the Pipeline ingests. (see [below for nested schema](#nestedatt--schedule))
-- `schema_evolution` (String) `ALLOW_ALL` replicates new objects and fields as they appear; `BLOCK_ALL` does not.
-- `source_config` (Dynamic) The Source's settings, as the connector's schema in `hevo_connector_metadata` names them. Hevo does not return a Source's settings, so changes made outside Terraform are not detected; a change here is sent as is, and Hevo tests the connection. After an import, the first apply records it without sending it. Pass credentials through a variable declared `sensitive = true` so plans show them as `(sensitive value)`.
+- `schema_evolution` (String) `ALLOW_ALL` replicates new objects and fields as they appear; `ALLOW_COLUMN_LEVEL` replicates new fields of existing objects, but not new objects; `BLOCK_ALL` replicates neither.
 - `source_connector_id` (String) The source connector, for example `SOURCE_CONNECTOR_POSTGRES`. List them with the `hevo_connectors` data source. Changing it replaces the Pipeline, and the new Pipeline loads all historical data again.
 - `source_name` (String) The Source's display name, unique within the team.
 
@@ -75,19 +74,15 @@ variable "postgres_password" {
 
 - `latency_alert` (Attributes) Alert when replication falls behind. (see [below for nested schema](#nestedatt--latency_alert))
 - `source_auth` (Dynamic, Sensitive) For a Source that authenticates with your own OAuth app: `client_access` (`client_id`, `client_secret` and any app-level credential) and `refresh_token` or `access_token`. Never read back.
+- `source_config` (Dynamic) The Source's settings, as the connector's schema in `hevo_connector_metadata` names them. Required to create a Pipeline, unless `source_auth` alone authorizes the Source. Hevo does not return a Source's settings, so changes made outside Terraform are not detected; a change here is sent as is, and Hevo tests the connection. After an import it may be left out, and the Source keeps its settings; when set, the first apply records it without sending it. Removing it later sends nothing. It is not marked sensitive, so that plans show which settings change: a credential written as a literal value is shown in plain text. Pass credentials through a variable declared `sensitive = true` so plans show them as `(sensitive value)`. Like every resource attribute, source_config is stored in state, so keep state encrypted.
+- `source_type` (String) The connector's variant, for example `AURORA` or `AWS_RDS_MYSQL` for a MySQL Source. The variants and the default are in the connector's schema in `hevo_connector_metadata`. When not set, Hevo uses the default. Changing it replaces the Pipeline, and the new Pipeline loads all historical data again.
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
 
 ### Read-Only
 
 - `created_at` (String) When the Pipeline was created, in RFC 3339.
 - `created_by` (String) Who created the Pipeline.
-- `disabled` (Boolean) Whether the Pipeline is paused. Change it with `hevo_pipeline_state`.
-- `health` (String) The Pipeline's health, for example `HEALTHY` or `NEEDS_ATTENTION`.
 - `id` (String) The Pipeline's id.
-- `source_type` (String) The source type, for example `POSTGRES`.
-- `state` (String) The Pipeline's state as the Hevo UI shows it, for example `Disabled` or `Initialized`.
-- `updated_at` (String) When the Pipeline was last changed, in RFC 3339.
-- `updated_by` (String) Who last changed the Pipeline.
 
 <a id="nestedatt--failure_handling_policy"></a>
 ### Nested Schema for `failure_handling_policy`
@@ -98,7 +93,7 @@ Required:
 
 Optional:
 
-- `object_failure_threshold` (Number) How many objects may fail under `PARTIAL`.
+- `object_failure_threshold` (Number) How many objects may fail under `PARTIAL`. Changing it replaces the Pipeline, and the new Pipeline loads all historical data again.
 
 
 <a id="nestedatt--schedule"></a>
@@ -110,7 +105,7 @@ Required:
 
 Optional:
 
-- `frequency_minutes` (Number) How often a `SCHEDULED` Pipeline ingests.
+- `frequency_minutes` (Number) How often a `SCHEDULED` Pipeline ingests. Required with `SCHEDULED`; ignored with `ON_DEMAND`.
 
 
 <a id="nestedatt--latency_alert"></a>
@@ -141,8 +136,8 @@ Import is supported using the following syntax:
 The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-# Import a Pipeline by its numeric id. Hevo does not return a Source's settings: write
-# source_config (and source_auth for an OAuth app) in the configuration. The next apply records
-# source_config as written without sending it, and sends source_auth.
+# Import a Pipeline by its numeric id. Hevo does not return a Source's settings, so source_config
+# may be left out, and the Source keeps its settings. When source_config is written, the next
+# apply records it as written without sending it. source_auth, for an OAuth app, is sent.
 terraform import hevo_pipeline.postgres 42
 ```

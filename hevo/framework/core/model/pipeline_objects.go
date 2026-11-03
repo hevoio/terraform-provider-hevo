@@ -1,12 +1,9 @@
 package model
 
 import (
-	"context"
 	"slices"
-	"sort"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	pipelineobjects "github.com/hevoio/hevo-go/pipeline_objects"
 )
@@ -48,14 +45,15 @@ func IsSelectable(o pipelineobjects.PipelineObject) bool {
 }
 
 // ReadFromObjects sets Objects from the Pipeline's objects. Each object in state takes its remote
-// selection, and its load mode and excluded fields when the user set them. An object outside
+// selection, and its load mode when the user set it. Its excluded fields stay as state has them:
+// the objects list does not return fields, and a GET per object would not scale. An object outside
 // state that departs from the desired set is added, so the plan shows it as drift: under
 // "listed" one selected outside Terraform, under "all" one deselected outside Terraform. On
-// import (no select in state) the selection is read as "listed".
-func (m *PipelineObjectsResourceModel) ReadFromObjects(ctx context.Context, remote []pipelineobjects.PipelineObject) diag.Diagnostics {
-	var diags diag.Diagnostics
-
-	if m.Select.IsNull() || m.Select.IsUnknown() {
+// import (no select in state) the selection is read as "listed", with each object's load mode
+// when it differs from the Pipeline's, pipelineLoadMode.
+func (m *PipelineObjectsResourceModel) ReadFromObjects(remote []pipelineobjects.PipelineObject, pipelineLoadMode string) {
+	imported := m.Select.IsNull() || m.Select.IsUnknown()
+	if imported {
 		m.Select = types.StringValue("listed")
 	}
 
@@ -73,21 +71,10 @@ func (m *PipelineObjectsResourceModel) ReadFromObjects(ctx context.Context, remo
 				current.LoadMode = types.StringValue(o.LoadMode)
 			}
 
-			if !prior.ExcludedFields.IsNull() {
-				set, d := types.SetValueFrom(ctx, types.StringType, excludedFields(o))
-				diags.Append(d...)
-
-				current.ExcludedFields = set
-			}
-
 			result[key] = current
 		case !IsSelectable(o):
 		case listed && o.Selected, !listed && !o.Selected:
-			result[key] = PipelineObjectModel{
-				Enabled:        types.BoolValue(o.Selected),
-				LoadMode:       types.StringNull(),
-				ExcludedFields: types.SetNull(types.StringType),
-			}
+			result[key] = outsideObject(o, imported, pipelineLoadMode)
 		}
 	}
 
@@ -96,21 +83,19 @@ func (m *PipelineObjectsResourceModel) ReadFromObjects(ctx context.Context, remo
 	}
 
 	m.Objects = result
-
-	return diags
 }
 
-// excludedFields lists an object's selectable fields that are not replicated, sorted.
-func excludedFields(o pipelineobjects.PipelineObject) []string {
-	fields := []string{}
-
-	for _, f := range o.Fields {
-		if f.Selectable && !f.Selected {
-			fields = append(fields, f.SourceName)
-		}
+// outsideObject is an object found outside state. Its load mode is read only on import, and only
+// when it differs from the Pipeline's.
+func outsideObject(o pipelineobjects.PipelineObject, imported bool, pipelineLoadMode string) PipelineObjectModel {
+	m := PipelineObjectModel{
+		Enabled:        types.BoolValue(o.Selected),
+		LoadMode:       types.StringNull(),
+		ExcludedFields: types.SetNull(types.StringType),
+	}
+	if imported && o.LoadMode != "" && o.LoadMode != pipelineLoadMode {
+		m.LoadMode = types.StringValue(o.LoadMode)
 	}
 
-	sort.Strings(fields)
-
-	return fields
+	return m
 }

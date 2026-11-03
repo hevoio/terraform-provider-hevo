@@ -6,6 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hevoio/hevo-go"
 
+	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core"
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core/model"
 	hevoschema "github.com/hevoio/terraform-provider-hevo/hevo/framework/core/schema"
 )
@@ -52,7 +53,7 @@ func readOneJob(
 ) {
 	job, err := client.GetPipelineJob().PipelineID(pipelineID).JobID(jobID).Do(ctx)
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to read job", err.Error())
+		resp.Diagnostics.AddError("Unable to read job", core.ErrorDetail(err))
 
 		return
 	}
@@ -68,7 +69,7 @@ func readOneJob(
 
 		page, err := call.Do(ctx)
 		if err != nil {
-			resp.Diagnostics.AddError("Unable to read the job's objects", err.Error())
+			resp.Diagnostics.AddError("Unable to read the job's objects", core.ErrorDetail(err))
 
 			return
 		}
@@ -109,7 +110,7 @@ func readJobs(ctx context.Context, client *hevo.Client, pipelineID int64, data *
 
 		page, err := call.Do(ctx)
 		if err != nil {
-			resp.Diagnostics.AddError("Unable to list jobs", err.Error())
+			resp.Diagnostics.AddError("Unable to list jobs", core.ErrorDetail(err))
 
 			return
 		}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -78,7 +79,7 @@ func (f *fakeObjects) selectedNames() []string {
 func (f *fakeObjects) register(t *testing.T, client *sdkmock.HTTPClient) {
 	t.Helper()
 
-	client.When(http.MethodGet, "/api/v2/pipelines/42").ThenReply(http.StatusOK, `{"code": "Success", "data": {"id": 42, "state": "Disabled"}}`)
+	client.When(http.MethodGet, "/api/v2/pipelines/42").ThenReply(http.StatusOK, `{"code": "Success", "data": {"id": 42, "state": "Disabled", "load_mode": "MERGE"}}`)
 
 	client.When(http.MethodGet, "/api/v2/pipelines/42/objects").ThenCall(func(req *http.Request) (*http.Response, error) {
 		f.mu.Lock()
@@ -96,7 +97,9 @@ func (f *fakeObjects) register(t *testing.T, client *sdkmock.HTTPClient) {
 		items := []map[string]any{}
 
 		for name, o := range f.objects {
+			// The list, unlike a GET, does not return an object's fields.
 			item := f.item(name, o)
+			delete(item, "fields")
 
 			status, _ := item["status"].(string)
 			if len(wanted) == 0 || slices.Contains(wanted, status) {
@@ -122,6 +125,9 @@ func (f *fakeObjects) register(t *testing.T, client *sdkmock.HTTPClient) {
 			return sdkmock.NewResponse(req, http.StatusOK, fmt.Sprintf(`{"code": "Success", "data": %s}`, data)), nil
 		})
 	}
+
+	client.When(http.MethodGet, "/api/v2/pipelines/42/objects/public.ordrs").ThenReply(http.StatusNotFound,
+		`{"code": "RESOURCE_NOT_FOUND", "message": "No object named 'public.ordrs' was found in Pipeline 42."}`)
 
 	client.When(http.MethodPatch, "/api/v2/pipelines/42/objects").ThenCall(func(req *http.Request) (*http.Response, error) {
 		f.mu.Lock()
@@ -252,6 +258,16 @@ func expectSelected(fake *fakeObjects, want ...string) func(*terraformState) err
 	}
 }
 
+func expectIncluded(fake *fakeObjects, object, field string) func(*terraformState) error {
+	return func(*terraformState) error {
+		if fake.objects[object].excluded[field] {
+			return fmt.Errorf("%s is still excluded from %s; PATCH = %v", field, object, fake.lastPatch)
+		}
+
+		return nil
+	}
+}
+
 func TestPipelineObjectsResourceMock(t *testing.T) {
 	t.Parallel()
 
@@ -289,6 +305,12 @@ func TestPipelineObjectsResourceMock(t *testing.T) {
 				),
 			},
 			{
+				// Excluded fields are kept from state, so a field excluded in the Hevo UI is not drift.
+				PreConfig: func() { fake.objects["public.users"].excluded["email"] = true },
+				Config:    listed,
+				PlanOnly:  true,
+			},
+			{
 				// An object selected in the Hevo UI is drift under "listed".
 				PreConfig:          func() { fake.setSelected("public.events", true) },
 				Config:             listed,
@@ -305,13 +327,25 @@ func TestPipelineObjectsResourceMock(t *testing.T) {
     "public.orders" = {}
     "public.users"  = { load_mode = "APPEND", excluded_fields = [] }
 `),
+				Check: expectIncluded(fake, "public.users", "ssn"),
+			},
+			{
+				Config: listed,
 				Check: func(*terraformState) error {
-					if fake.objects["public.users"].excluded["ssn"] {
-						return fmt.Errorf("ssn is still excluded; PATCH = %v", fake.lastPatch)
+					if !fake.objects["public.users"].excluded["ssn"] {
+						return fmt.Errorf("ssn is not excluded; PATCH = %v", fake.lastPatch)
 					}
 
 					return nil
 				},
+			},
+			{
+				// Removing excluded_fields includes the fields it excluded.
+				Config: objectsConfig("listed", `
+    "public.orders" = {}
+    "public.users"  = { load_mode = "APPEND" }
+`),
+				Check: expectIncluded(fake, "public.users", "ssn"),
 			},
 			{
 				// "all" replicates everything selectable except what is disabled.
@@ -340,8 +374,10 @@ func TestPipelineObjectsResourceImportMock(t *testing.T) {
 	fake := newFakeObjects()
 	fake.register(t, client)
 
+	// An object's load mode is imported only when it differs from the Pipeline's (MERGE).
 	config := objectsConfig("listed", `
     "public.orders" = {}
+    "public.users"  = { load_mode = "APPEND" }
 `)
 
 	resource.UnitTest(t, resource.TestCase{
@@ -358,7 +394,58 @@ func TestPipelineObjectsResourceImportMock(t *testing.T) {
 			{
 				// Removing the resource leaves the selection as it is.
 				Config: mock.ProviderConfig,
-				Check:  expectSelected(fake, "public.orders"),
+				Check:  expectSelected(fake, "public.orders", "public.users"),
+			},
+		},
+	})
+}
+
+func TestPipelineObjectsResourceRejectsUnknownObjectMock(t *testing.T) {
+	t.Parallel()
+
+	client, factories := mock.NewProvider()
+	fake := newFakeObjects()
+	fake.register(t, client)
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{
+				// A create is not checked: a new Pipeline lists no objects until Hevo discovers them.
+				PreConfig: func() { fake.gets = 0 },
+				Config: objectsConfig("listed", `
+    "public.orders" = {}
+`),
+				Check: func(*terraformState) error {
+					if fake.gets != 0 {
+						return fmt.Errorf("objects read one by one %d times, want 0", fake.gets)
+					}
+
+					return nil
+				},
+			},
+			{
+				// An object an update adds is checked.
+				Config: objectsConfig("listed", `
+    "public.orders" = {}
+    "public.ordrs"  = {}
+`),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`No\s+object\s+named\s+'public.ordrs'\s+was\s+found`),
+			},
+			{
+				// An object already in state is not read again at plan time.
+				PreConfig: func() { fake.gets = 0 },
+				Config: objectsConfig("listed", `
+    "public.orders" = { load_mode = "APPEND" }
+`),
+				Check: func(*terraformState) error {
+					if fake.gets != 0 {
+						return fmt.Errorf("objects read one by one %d times, want 0", fake.gets)
+					}
+
+					return nil
+				},
 			},
 		},
 	})

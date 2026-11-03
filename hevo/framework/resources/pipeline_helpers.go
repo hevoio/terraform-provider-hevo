@@ -44,9 +44,11 @@ func equalSchedule(a, b *model.ScheduleModel) bool {
 	return a != nil && b != nil && a.SyncType.Equal(b.SyncType) && a.FrequencyMinutes.Equal(b.FrequencyMinutes)
 }
 
-func equalFailurePolicy(a, b *model.FailureHandlingPolicyModel) bool {
-	return a != nil && b != nil && a.ObjectFailureLevel.Equal(b.ObjectFailureLevel) &&
-		a.ObjectFailureThreshold.Equal(b.ObjectFailureThreshold)
+// equalFailurePolicy reports whether the planned policy needs no update. A threshold removed from
+// the plan is not a change: Hevo keeps the one set at create.
+func equalFailurePolicy(plan, state *model.FailureHandlingPolicyModel) bool {
+	return plan != nil && state != nil && plan.ObjectFailureLevel.Equal(state.ObjectFailureLevel) &&
+		(plan.ObjectFailureThreshold.IsNull() || plan.ObjectFailureThreshold.Equal(state.ObjectFailureThreshold))
 }
 
 func equalLatencyAlert(a, b *model.LatencyAlertModel) bool {

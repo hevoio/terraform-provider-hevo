@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -11,14 +12,61 @@ import (
 )
 
 // ValidateConfig checks config against a connector's schema: every key is one the connector
-// knows, values have the right type and allowed value, and required keys are present. Keys the
-// connector requires only under a choice (if/then) are left to the API.
+// knows, values have the right type, allowed value and pattern, and required keys are present,
+// including keys required under a choice (if/then), as Hevo checks them with defaults filled in.
 func ValidateConfig(config map[string]any, schema *Property, root path.Path, diags *diag.Diagnostics) {
 	if schema == nil {
 		return
 	}
 
 	validateObject(config, schema, root, diags)
+}
+
+// validateConditions checks the keys an object requires under its if/then rules. A key not set
+// counts as its schema default, as Hevo fills it in. The message is Hevo's own.
+func validateConditions(values map[string]any, schema *Property, at path.Path, diags *diag.Diagnostics) {
+	var missing []string
+
+	for _, c := range schema.Conditions {
+		if !conditionHolds(values, schema, c) {
+			continue
+		}
+
+		for _, key := range c.Required {
+			if value, ok := values[key]; (!ok || value == nil) && !slices.Contains(missing, key) {
+				missing = append(missing, key)
+			}
+		}
+	}
+
+	if len(missing) == 0 {
+		return
+	}
+
+	sort.Strings(missing)
+	diags.AddAttributeError(at, "Missing required config key",
+		fmt.Sprintf("The configuration is incomplete because no value was specified for the following fields: %s. "+
+			"Specify a value for each of them.", strings.Join(missing, ", ")))
+}
+
+func conditionHolds(values map[string]any, schema *Property, c Condition) bool {
+	for key, want := range c.When {
+		value, ok := values[key]
+		if !ok || value == nil {
+			prop := schema.property(key)
+			if prop == nil || prop.Default == nil {
+				return false
+			}
+
+			value = prop.Default
+		}
+
+		if !ScalarsEqual(value, want) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func validateObject(values map[string]any, schema *Property, at path.Path, diags *diag.Diagnostics) {
@@ -38,6 +86,8 @@ func validateObject(values map[string]any, schema *Property, at path.Path, diags
 		}
 	}
 
+	validateConditions(values, schema, at, diags)
+
 	for _, key := range sortedKeys(values) {
 		prop := schema.Properties[key]
 		if prop == nil || values[key] == nil {
@@ -51,11 +101,11 @@ func validateObject(values map[string]any, schema *Property, at path.Path, diags
 			continue
 		}
 
-		validateValue(values[key], prop, at.AtMapKey(key), diags)
+		validateValue(key, values[key], prop, at.AtMapKey(key), diags)
 	}
 }
 
-func validateValue(value any, prop *Property, at path.Path, diags *diag.Diagnostics) {
+func validateValue(key string, value any, prop *Property, at path.Path, diags *diag.Diagnostics) {
 	if !hasType(value, prop.Type) {
 		diags.AddAttributeError(at, "Wrong config value type",
 			fmt.Sprintf("Expected %s, got %v.", prop.Type, value))
@@ -71,6 +121,14 @@ func validateValue(value any, prop *Property, at path.Path, diags *diag.Diagnost
 
 		diags.AddAttributeError(at, "Config value not allowed",
 			fmt.Sprintf("Got %v; allowed values: %s.", value, strings.Join(allowed, ", ")))
+	}
+
+	if text, ok := value.(string); ok && prop.Pattern != "" {
+		// A pattern Go cannot compile is left to the API.
+		if re, err := regexp.Compile(prop.Pattern); err == nil && !re.MatchString(text) {
+			diags.AddAttributeError(at, "Config value does not match the pattern",
+				fmt.Sprintf("'%s' must match `%s`; got %q.", key, prop.Pattern, text))
+		}
 	}
 
 	if nested, ok := value.(map[string]any); ok {

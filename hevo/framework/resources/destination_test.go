@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net/http"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 
@@ -26,6 +27,7 @@ const snowflakeSchema = `{"code": "Success", "data": {"connector_id": "snowflake
       "username":    {"type": "string"},
       "password":    {"type": "string", "format": "password", "writeOnly": true},
       "port":        {"type": "integer"},
+      "use_customer_s3_stage": {"type": "boolean", "default": false},
       "auth_type":   {"type": "string", "oneOf": [{"const": "PASSWORD"}, {"const": "KEY_PAIR"}]}
     }}}}}}`
 
@@ -250,6 +252,52 @@ func TestDestinationResourceMock(t *testing.T) {
 	})
 }
 
+func TestDestinationResourceSkipsCurrentValuesMock(t *testing.T) {
+	t.Parallel()
+
+	client, factories := mock.NewProvider()
+	fake := &fakeDestinations{}
+	fake.register(t, client)
+
+	// Hevo returns auth_type once set, and never use_customer_s3_stage, which takes its default.
+	withKeys := func(warehouse string) string {
+		return strings.Replace(destinationConfig("Snowflake", warehouse, ""), `    port        = 443`, `    port        = 443
+    auth_type   = "PASSWORD"
+    use_customer_s3_stage = false`, 1)
+	}
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{Config: destinationConfig("Snowflake", "LOAD_WH", "")},
+			{
+				// Keys added with the values Hevo already has are not sent: Hevo rejects a key that
+				// cannot be edited even when its value is unchanged.
+				PreConfig: func() { fake.setConfig("auth_type", "PASSWORD") },
+				Config:    withKeys("LOAD_WH"),
+				Check: func(*terraformState) error {
+					if fake.patches != 0 {
+						return fmt.Errorf("PATCH calls = %d, want 0: %v", fake.patches, fake.lastPatch)
+					}
+
+					return nil
+				},
+			},
+			{
+				Config: withKeys("LOAD_WH_2"),
+				Check: func(*terraformState) error {
+					expected := map[string]any{"config": map[string]any{"warehouse": "LOAD_WH_2"}}
+					if fmt.Sprint(fake.lastPatch) != fmt.Sprint(expected) {
+						return fmt.Errorf("PATCH body = %v, want %v", fake.lastPatch, expected)
+					}
+
+					return nil
+				},
+			},
+		},
+	})
+}
+
 func TestDestinationResourceImportReadsNonSecretConfigMock(t *testing.T) {
 	t.Parallel()
 
@@ -328,7 +376,7 @@ func TestDestinationResourceForceDeleteMock(t *testing.T) {
 				// Without force_delete, a Destination that Pipelines use is not deleted.
 				Config:      destinationConfig("Snowflake", "LOAD_WH", ""),
 				Destroy:     true,
-				ExpectError: regexp.MustCompile(`(?s)Destination still has Pipelines.*Orders\s+\(42\).*force_delete`),
+				ExpectError: regexp.MustCompile(`(?s)Destination still has Pipelines.*force_delete.*Orders\s+\(42\)`),
 			},
 			{
 				// Turning force_delete on changes only state.

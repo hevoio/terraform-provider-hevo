@@ -41,7 +41,7 @@ variable "snowflake_password" {
 
 ### Required
 
-- `config` (Dynamic) The connector's settings, as its schema in the `hevo_connector_metadata` data source names them. Credentials are write-only: Hevo masks them in every read, so the provider keeps the value you set. Only the keys you set are compared for drift. Pass credentials through a variable declared `sensitive = true`: Terraform then shows them as `(sensitive value)` in plans. Like every resource attribute, config is stored in state, so keep state encrypted.
+- `config` (Dynamic) The connector's settings, as its schema in the `hevo_connector_metadata` data source names them. Credentials are write-only: Hevo masks them in every read, so the provider keeps the value you set. Only the keys you set are compared for drift. It is not marked sensitive, so that plans show which settings change: a credential written as a literal value is shown in plain text. Pass credentials through a variable declared `sensitive = true`: Terraform then shows them as `(sensitive value)` in plans. Like every resource attribute, config is stored in state, so keep state encrypted.
 - `connector_id` (String) The destination connector, for example `snowflake`. List them with the `hevo_connectors` data source. Changing it replaces the Destination.
 - `name` (String) The Destination's display name, unique within the team.
 
@@ -67,6 +67,7 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 
 ```shell
 # Import a Destination by its numeric id. Credentials are never read back: add them to config
-# before the next apply.
+# before the next apply. The first plan also lists settings Hevo has that config does not set;
+# those are not sent, and the plan settles after one apply.
 terraform import hevo_destination.snowflake 7
 ```

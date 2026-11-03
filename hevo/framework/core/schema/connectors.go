@@ -80,7 +80,13 @@ func ConnectorMetadataDatasourceSchema() schema.Schema {
 			},
 			"type": schema.StringAttribute{
 				Computed:    true,
-				Description: "The connector's type, for example `SNOWFLAKE`.",
+				Description: "The connector's type, for example `SNOWFLAKE`; for a source connector, its default variant, for example `MYSQL`.",
+			},
+			"source_types": schema.ListAttribute{
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "The variants of a source connector, the values `source_type` of `hevo_pipeline` takes, for " +
+					"example `AURORA` or `AWS_RDS_MYSQL`. Empty for a destination connector.",
 			},
 			"display_name": schema.StringAttribute{
 				Computed:    true,
@@ -99,7 +105,9 @@ func ConnectorMetadataDatasourceSchema() schema.Schema {
 			"write_only_config_keys": schema.ListAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "The `config` keys that are credentials: accepted on write, masked in every read.",
+				Description: "The `config` keys that are credentials: accepted on write, masked in every read. Keys " +
+					"Hevo masks by their name, such as Snowflake's `private_key`, are listed even where the schema " +
+					"does not mark them write-only.",
 			},
 		},
 	}

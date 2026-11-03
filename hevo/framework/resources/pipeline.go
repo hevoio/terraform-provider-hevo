@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -31,9 +32,10 @@ type pipeline struct {
 }
 
 var (
-	_ resource.ResourceWithConfigure   = (*pipeline)(nil)
-	_ resource.ResourceWithImportState = (*pipeline)(nil)
-	_ resource.ResourceWithModifyPlan  = (*pipeline)(nil)
+	_ resource.ResourceWithConfigure      = (*pipeline)(nil)
+	_ resource.ResourceWithImportState    = (*pipeline)(nil)
+	_ resource.ResourceWithModifyPlan     = (*pipeline)(nil)
+	_ resource.ResourceWithValidateConfig = (*pipeline)(nil)
 )
 
 func (r *pipeline) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -54,6 +56,98 @@ func (r *pipeline) ImportState(ctx context.Context, req resource.ImportStateRequ
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+// ValidateConfig checks the schedule and the failure handling policy as Hevo does, with Hevo's
+// messages.
+func (r *pipeline) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	validateSchedule(ctx, req, resp)
+	validateFailureHandlingPolicy(ctx, req, resp)
+	validateLatencyAlert(ctx, req, resp)
+}
+
+// validateLatencyAlert checks an enabled alert's threshold: from 5 minutes to 15 days, and at least
+// twice a SCHEDULED Pipeline's frequency. A threshold not set is left to Hevo.
+func validateLatencyAlert(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	alert := path.Root("latency_alert")
+
+	var (
+		enabled   types.Bool
+		threshold types.Int64
+		syncType  types.String
+		frequency types.Int64
+	)
+
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, alert.AtName("enabled"), &enabled)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, alert.AtName("threshold_minutes"), &threshold)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("schedule").AtName("sync_type"), &syncType)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("schedule").AtName("frequency_minutes"), &frequency)...)
+
+	if resp.Diagnostics.HasError() || !enabled.ValueBool() || threshold.IsNull() || threshold.IsUnknown() {
+		return
+	}
+
+	at := alert.AtName("threshold_minutes")
+	minutes := threshold.ValueInt64()
+
+	switch {
+	case minutes < 0:
+		resp.Diagnostics.AddAttributeError(at, "Invalid threshold_minutes", "Latency threshold can not be negative")
+	case minutes < 5 || minutes > 21600:
+		resp.Diagnostics.AddAttributeError(at, "Invalid threshold_minutes",
+			"Latency threshold should be greater than 5 minutes and less than 15 days")
+	case syncType.ValueString() == "SCHEDULED" && !frequency.IsNull() && !frequency.IsUnknown() &&
+		minutes < 2*frequency.ValueInt64():
+		resp.Diagnostics.AddAttributeError(at, "Invalid threshold_minutes",
+			"Latency threshold can not be less than twice the sync frequency")
+	}
+}
+
+// validateSchedule checks that a SCHEDULED Pipeline has a frequency greater than 0.
+func validateSchedule(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	schedule := path.Root("schedule")
+
+	var (
+		syncType  types.String
+		frequency types.Int64
+	)
+
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, schedule.AtName("sync_type"), &syncType)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, schedule.AtName("frequency_minutes"), &frequency)...)
+
+	if resp.Diagnostics.HasError() || frequency.IsUnknown() || syncType.ValueString() != "SCHEDULED" {
+		return
+	}
+
+	if frequency.IsNull() || frequency.ValueInt64() <= 0 {
+		resp.Diagnostics.AddAttributeError(schedule.AtName("frequency_minutes"), "Invalid frequency_minutes",
+			"The schedule.frequency_minutes field is required to create or modify a Pipeline when sync_type is "+
+				"SCHEDULED. Specify a value greater than 0.")
+	}
+}
+
+// validateFailureHandlingPolicy checks that PARTIAL has a threshold, and that a threshold is
+// greater than 0.
+func validateFailureHandlingPolicy(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	policy := path.Root("failure_handling_policy")
+
+	var (
+		level     types.String
+		threshold types.Int64
+	)
+
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, policy.AtName("object_failure_level"), &level)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, policy.AtName("object_failure_threshold"), &threshold)...)
+
+	if resp.Diagnostics.HasError() || threshold.IsUnknown() {
+		return
+	}
+
+	if (threshold.IsNull() && level.ValueString() == "PARTIAL") || (!threshold.IsNull() && threshold.ValueInt64() <= 0) {
+		resp.Diagnostics.AddAttributeError(policy.AtName("object_failure_threshold"), "Invalid object_failure_threshold",
+			"Object Failure Threshold in Pipeline Failure Handling Policy"+
+				"(`$.failure_handling_policy.object_failure_threshold`) should be greater than 0.")
+	}
+}
+
 // ModifyPlan warns when the plan replaces the Pipeline, and checks source_config against the
 // connector's schema unless the provider skips plan-time validation.
 func (r *pipeline) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
@@ -61,19 +155,28 @@ func (r *pipeline) ModifyPlan(ctx context.Context, req resource.ModifyPlanReques
 		return
 	}
 
-	if !req.State.Raw.IsNull() {
-		warnOnReplacement(ctx, req, resp)
-	}
-
-	if r.GetClient() == nil || r.GetSkipPlanTimeValidation() {
-		return
-	}
-
 	var plan model.PipelineResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 
-	if resp.Diagnostics.HasError() || plan.SourceConnectorID.IsUnknown() || !core.IsFullyKnown(plan.SourceConfig) {
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if req.State.Raw.IsNull() {
+		// Only an imported Pipeline may leave source_config out: Hevo needs it to create one.
+		if plan.SourceConfig.IsNull() && plan.SourceAuth.IsNull() {
+			resp.Diagnostics.AddAttributeError(path.Root("source_config"), "Missing source_config",
+				"Source config(`$.source.config`) is required.")
+
+			return
+		}
+	} else {
+		warnOnReplacement(ctx, req, resp)
+	}
+
+	if r.GetClient() == nil || r.GetSkipPlanTimeValidation() || plan.SourceConfig.IsNull() ||
+		plan.SourceConnectorID.IsUnknown() || !core.IsFullyKnown(plan.SourceConfig) {
 		return
 	}
 
@@ -87,8 +190,7 @@ func (r *pipeline) ModifyPlan(ctx context.Context, req resource.ModifyPlanReques
 	schema, err := core.GetSourceConnectorSchema(ctx, r.GetClient(), r.GetMetadataCache(), plan.SourceConnectorID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddAttributeError(path.Root("source_connector_id"), "Unable to read the connector's schema",
-			fmt.Sprintf("%v. Set skip_plan_time_validation = true in the provider block to plan without it; "+
-				"config mistakes then surface at apply.", err))
+			core.SchemaReadErrorDetail(err))
 
 		return
 	}
@@ -97,22 +199,29 @@ func (r *pipeline) ModifyPlan(ctx context.Context, req resource.ModifyPlanReques
 }
 
 // replacingAttributes are the attributes whose change creates a new Pipeline.
-var replacingAttributes = []string{"source_connector_id", "destination_id", "destination_prefix", "replication_type"}
+var replacingAttributes = []path.Path{
+	path.Root("source_connector_id"),
+	path.Root("source_type"),
+	path.Root("destination_id"),
+	path.Root("destination_prefix"),
+	path.Root("replication_type"),
+	path.Root("failure_handling_policy").AtName("object_failure_threshold"),
+}
 
 // warnOnReplacement warns when the plan changes an attribute that replaces the Pipeline. The
 // attributes' RequiresReplace modifiers are not visible to the resource's ModifyPlan, so the
-// values are compared here.
+// values are compared here. A value removed from the configuration does not replace it.
 func warnOnReplacement(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	var changed []string
 
-	for _, name := range replacingAttributes {
-		var planned, current types.String
+	for _, p := range replacingAttributes {
+		var planned, current attr.Value
 
-		resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root(name), &planned)...)
-		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root(name), &current)...)
+		resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, p, &planned)...)
+		resp.Diagnostics.Append(req.State.GetAttribute(ctx, p, &current)...)
 
-		if !planned.IsUnknown() && !planned.Equal(current) {
-			changed = append(changed, name)
+		if !planned.IsUnknown() && !planned.IsNull() && !planned.Equal(current) {
+			changed = append(changed, p.String())
 		}
 	}
 
@@ -168,7 +277,7 @@ func (r *pipeline) Create(ctx context.Context, req resource.CreateRequest, resp 
 		}
 
 		if !found {
-			resp.Diagnostics.AddError("Unable to create Pipeline", err.Error())
+			resp.Diagnostics.AddError("Unable to create Pipeline", core.ErrorDetail(err))
 
 			return
 		}
@@ -180,7 +289,7 @@ func (r *pipeline) Create(ctx context.Context, req resource.CreateRequest, resp 
 
 	if core.IsTransitionalPipelineState(current.State) {
 		if current, err = core.WaitForPipeline(ctx, r.GetClient(), current.ID); err != nil {
-			resp.Diagnostics.AddError("Pipeline created but not settled", err.Error())
+			resp.Diagnostics.AddError("Pipeline created but not settled", core.ErrorDetail(err))
 		}
 	}
 
@@ -196,13 +305,17 @@ func (r *pipeline) createCall(plan model.PipelineResourceModel) (*pipelines.Crea
 
 	destinationID, err := strconv.ParseInt(plan.DestinationID.ValueString(), 10, 64)
 	if err != nil {
-		diags.AddAttributeError(path.Root("destination_id"), "Invalid destination_id", err.Error())
+		diags.AddAttributeError(path.Root("destination_id"), "Invalid destination_id", core.ErrorDetail(err))
 	}
 
 	source := hevo.NewSource().
 		Name(plan.SourceName.ValueString()).
 		ConnectorID(plan.SourceConnectorID.ValueString()).
 		Config(config)
+	if !plan.SourceType.IsNull() && !plan.SourceType.IsUnknown() {
+		source.Type(plan.SourceType.ValueString())
+	}
+
 	if auth != nil {
 		source.Auth(auth)
 	}
@@ -244,7 +357,7 @@ func (r *pipeline) Read(ctx context.Context, req resource.ReadRequest, resp *res
 
 	id, err := state.PipelineID()
 	if err != nil {
-		resp.Diagnostics.AddError("Invalid Pipeline id in state", err.Error())
+		resp.Diagnostics.AddError("Invalid Pipeline id in state", core.ErrorDetail(err))
 
 		return
 	}
@@ -257,7 +370,7 @@ func (r *pipeline) Read(ctx context.Context, req resource.ReadRequest, resp *res
 	}
 
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to read Pipeline", err.Error())
+		resp.Diagnostics.AddError("Unable to read Pipeline", core.ErrorDetail(err))
 
 		return
 	}
@@ -297,7 +410,7 @@ func (r *pipeline) Update(ctx context.Context, req resource.UpdateRequest, resp 
 
 	id, err := state.PipelineID()
 	if err != nil {
-		resp.Diagnostics.AddError("Invalid Pipeline id in state", err.Error())
+		resp.Diagnostics.AddError("Invalid Pipeline id in state", core.ErrorDetail(err))
 	}
 
 	if resp.Diagnostics.HasError() {
@@ -328,7 +441,7 @@ func (r *pipeline) Update(ctx context.Context, req resource.UpdateRequest, resp 
 
 	current, err := r.GetClient().GetPipeline().PipelineID(id).Do(ctx)
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to read Pipeline after update", err.Error())
+		resp.Diagnostics.AddError("Unable to read Pipeline after update", core.ErrorDetail(err))
 
 		return
 	}
@@ -340,13 +453,13 @@ func (r *pipeline) Update(ctx context.Context, req resource.UpdateRequest, resp 
 // apply sends one edit, retrying while the Pipeline is busy, then waits for Hevo to apply it.
 func (r *pipeline) apply(ctx context.Context, id int64, what string, send func(context.Context) error, diags *diag.Diagnostics) bool {
 	if err := core.RetryOnConflict(ctx, send); err != nil {
-		diags.AddError("Unable to update the Pipeline's "+what, err.Error())
+		diags.AddError("Unable to update the Pipeline's "+what, core.ErrorDetail(err))
 
 		return false
 	}
 
 	if _, err := core.WaitForPipeline(ctx, r.GetClient(), id); err != nil {
-		diags.AddError("The Pipeline's "+what+" update did not finish", err.Error())
+		diags.AddError("The Pipeline's "+what+" update did not finish", core.ErrorDetail(err))
 
 		return false
 	}
@@ -429,8 +542,9 @@ func (r *pipeline) sourceUpdate(plan, state model.PipelineResourceModel, id int6
 		}
 	} else if planConfig != nil {
 		diags.AddAttributeWarning(path.Root("source_config"), "source_config recorded, not sent",
-			"This Pipeline was imported and Hevo does not return a Source's settings, so source_config is "+
-				"recorded as written without being checked against Hevo. Later changes to it are sent.")
+			"State had no source_config, as after an import, and Hevo does not return a Source's settings, so "+
+				"source_config is recorded as written without being checked against Hevo. Later changes to it "+
+				"are sent.")
 	}
 
 	if !plan.SourceAuth.Equal(state.SourceAuth) && !plan.SourceAuth.IsNull() {
@@ -468,7 +582,7 @@ func (r *pipeline) Delete(ctx context.Context, req resource.DeleteRequest, resp 
 
 	id, err := state.PipelineID()
 	if err != nil {
-		resp.Diagnostics.AddError("Invalid Pipeline id in state", err.Error())
+		resp.Diagnostics.AddError("Invalid Pipeline id in state", core.ErrorDetail(err))
 	}
 
 	if resp.Diagnostics.HasError() {
@@ -484,6 +598,6 @@ func (r *pipeline) Delete(ctx context.Context, req resource.DeleteRequest, resp 
 		return err
 	})
 	if err != nil && !hevo.IsNotFound(err) {
-		resp.Diagnostics.AddError("Unable to delete Pipeline", err.Error())
+		resp.Diagnostics.AddError("Unable to delete Pipeline", core.ErrorDetail(err))
 	}
 }

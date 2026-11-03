@@ -43,17 +43,44 @@ Read-Only:
 - `destination_id` (String) The id of the Destination the Pipeline loads into.
 - `destination_prefix` (String) The prefix of the tables the Pipeline creates.
 - `disabled` (Boolean) Whether the Pipeline is paused.
-- `frequency_minutes` (Number) How often a `SCHEDULED` Pipeline ingests.
+- `failure_handling_policy` (Attributes) How many objects may fail before a load fails. (see [below for nested schema](#nestedatt--pipelines--failure_handling_policy))
 - `health` (String) The Pipeline's health, for example `HEALTHY`.
 - `id` (String) The Pipeline's id.
+- `latency_alert` (Attributes) The alert raised when replication falls behind. (see [below for nested schema](#nestedatt--pipelines--latency_alert))
 - `load_mode` (String) `MERGE`, `APPEND` or `HISTORY_TRACKING`.
 - `name` (String) The Pipeline's display name.
 - `replication_type` (String) `HISTORICAL_AND_INCREMENTAL` or `INCREMENTAL_ONLY`.
+- `schedule` (Attributes) When the Pipeline ingests. (see [below for nested schema](#nestedatt--pipelines--schedule))
 - `schema_evolution` (String) `ALLOW_ALL`, `BLOCK_ALL` or `ALLOW_COLUMN_LEVEL`.
 - `source_connector_id` (String) The source connector, for example `SOURCE_CONNECTOR_POSTGRES`.
 - `source_name` (String) The Source's display name.
 - `source_type` (String) The source type, for example `POSTGRES`.
 - `state` (String) The Pipeline's state, for example `Initialized` or `Disabled`.
-- `sync_type` (String) The schedule: `SCHEDULED` or `ON_DEMAND`.
 - `updated_at` (String) When the Pipeline was last changed, in RFC 3339.
 - `updated_by` (String) Who last changed the Pipeline.
+
+<a id="nestedatt--pipelines--failure_handling_policy"></a>
+### Nested Schema for `pipelines.failure_handling_policy`
+
+Read-Only:
+
+- `object_failure_level` (String) `PARTIAL` or `ALL_OR_NONE`.
+- `object_failure_threshold` (Number) How many objects may fail under `PARTIAL`.
+
+
+<a id="nestedatt--pipelines--latency_alert"></a>
+### Nested Schema for `pipelines.latency_alert`
+
+Read-Only:
+
+- `enabled` (Boolean) Whether the alert is on.
+- `threshold_minutes` (Number) The latency that raises the alert.
+
+
+<a id="nestedatt--pipelines--schedule"></a>
+### Nested Schema for `pipelines.schedule`
+
+Read-Only:
+
+- `frequency_minutes` (Number) How often a `SCHEDULED` Pipeline ingests; null for `ON_DEMAND`.
+- `sync_type` (String) `SCHEDULED` or `ON_DEMAND`.

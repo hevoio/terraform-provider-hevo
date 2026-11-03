@@ -3,12 +3,12 @@
 page_title: "hevo_pipeline_state Resource - hevo"
 subcategory: ""
 description: |-
-  Whether a Pipeline replicates or is paused. Kept apart from hevo_pipeline so one apply can create the Pipeline, select its objects with hevo_pipeline_objects, and then enable it. Removing this resource leaves the Pipeline as it is.
+  Whether a Pipeline replicates or is paused. Kept apart from hevo_pipeline so one apply can create the Pipeline, select its objects with hevo_pipeline_objects, and then enable it. Set depends_on to the Pipeline's hevo_pipeline_objects, as in the example: Hevo rejects an objects change made while the Pipeline is being paused, and depends_on applies the objects first. Removing this resource leaves the Pipeline as it is.
 ---
 
 # hevo_pipeline_state (Resource)
 
-Whether a Pipeline replicates or is paused. Kept apart from `hevo_pipeline` so one apply can create the Pipeline, select its objects with `hevo_pipeline_objects`, and then enable it. Removing this resource leaves the Pipeline as it is.
+Whether a Pipeline replicates or is paused. Kept apart from `hevo_pipeline` so one apply can create the Pipeline, select its objects with `hevo_pipeline_objects`, and then enable it. Set `depends_on` to the Pipeline's `hevo_pipeline_objects`, as in the example: Hevo rejects an objects change made while the Pipeline is being paused, and `depends_on` applies the objects first. Removing this resource leaves the Pipeline as it is.
 
 ## Example Usage
 
@@ -18,6 +18,7 @@ resource "hevo_pipeline_state" "postgres" {
   pipeline_id = hevo_pipeline.postgres.id
   paused      = false
 
+  # Objects first: Hevo rejects an objects change made while the Pipeline is being paused.
   depends_on = [hevo_pipeline_objects.postgres]
 }
 ```

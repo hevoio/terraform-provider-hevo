@@ -63,25 +63,26 @@ type DestinationsDatasourceModel struct {
 
 // PipelineSummaryModel is a Pipeline as the lookup data sources expose it.
 type PipelineSummaryModel struct {
-	ID                types.String `tfsdk:"id"`
-	Name              types.String `tfsdk:"name"`
-	State             types.String `tfsdk:"state"`
-	Disabled          types.Bool   `tfsdk:"disabled"`
-	Health            types.String `tfsdk:"health"`
-	SourceName        types.String `tfsdk:"source_name"`
-	SourceConnectorID types.String `tfsdk:"source_connector_id"`
-	SourceType        types.String `tfsdk:"source_type"`
-	DestinationID     types.String `tfsdk:"destination_id"`
-	DestinationPrefix types.String `tfsdk:"destination_prefix"`
-	ReplicationType   types.String `tfsdk:"replication_type"`
-	LoadMode          types.String `tfsdk:"load_mode"`
-	SchemaEvolution   types.String `tfsdk:"schema_evolution"`
-	SyncType          types.String `tfsdk:"sync_type"`
-	FrequencyMinutes  types.Int64  `tfsdk:"frequency_minutes"`
-	CreatedAt         types.String `tfsdk:"created_at"`
-	CreatedBy         types.String `tfsdk:"created_by"`
-	UpdatedAt         types.String `tfsdk:"updated_at"`
-	UpdatedBy         types.String `tfsdk:"updated_by"`
+	ID                    types.String                `tfsdk:"id"`
+	Name                  types.String                `tfsdk:"name"`
+	State                 types.String                `tfsdk:"state"`
+	Disabled              types.Bool                  `tfsdk:"disabled"`
+	Health                types.String                `tfsdk:"health"`
+	SourceName            types.String                `tfsdk:"source_name"`
+	SourceConnectorID     types.String                `tfsdk:"source_connector_id"`
+	SourceType            types.String                `tfsdk:"source_type"`
+	DestinationID         types.String                `tfsdk:"destination_id"`
+	DestinationPrefix     types.String                `tfsdk:"destination_prefix"`
+	ReplicationType       types.String                `tfsdk:"replication_type"`
+	LoadMode              types.String                `tfsdk:"load_mode"`
+	SchemaEvolution       types.String                `tfsdk:"schema_evolution"`
+	Schedule              *ScheduleModel              `tfsdk:"schedule"`
+	FailureHandlingPolicy *FailureHandlingPolicyModel `tfsdk:"failure_handling_policy"`
+	LatencyAlert          *LatencyAlertModel          `tfsdk:"latency_alert"`
+	CreatedAt             types.String                `tfsdk:"created_at"`
+	CreatedBy             types.String                `tfsdk:"created_by"`
+	UpdatedAt             types.String                `tfsdk:"updated_at"`
+	UpdatedBy             types.String                `tfsdk:"updated_by"`
 }
 
 // NewPipelineSummary maps one API Pipeline.
@@ -100,13 +101,32 @@ func NewPipelineSummary(p pipelines.PipelineDetails) PipelineSummaryModel {
 		ReplicationType:   types.StringValue(p.ReplicationType),
 		LoadMode:          types.StringValue(p.LoadMode),
 		SchemaEvolution:   types.StringValue(p.SchemaEvolution),
-		SyncType:          types.StringValue(p.Schedule.SyncType),
-		FrequencyMinutes:  types.Int64Value(p.Schedule.FrequencyMinutes),
-		CreatedAt:         millisToRFC3339(p.CreatedAt),
-		CreatedBy:         types.StringValue(p.CreatedBy),
-		UpdatedAt:         millisToRFC3339(p.UpdatedAt),
-		UpdatedBy:         types.StringValue(p.UpdatedBy),
+		Schedule: &ScheduleModel{
+			SyncType:         types.StringValue(p.Schedule.SyncType),
+			FrequencyMinutes: nullIfZero(p.Schedule.FrequencyMinutes),
+		},
+		FailureHandlingPolicy: &FailureHandlingPolicyModel{
+			ObjectFailureLevel:     types.StringValue(p.FailureHandlingPolicy.ObjectFailureLevel),
+			ObjectFailureThreshold: types.Int64Value(p.FailureHandlingPolicy.ObjectFailureThreshold),
+		},
+		LatencyAlert: &LatencyAlertModel{
+			Enabled:          types.BoolValue(p.LatencyAlert.Enabled),
+			ThresholdMinutes: types.Int64Value(int64(p.LatencyAlert.ThresholdMinutes)),
+		},
+		CreatedAt: millisToRFC3339(p.CreatedAt),
+		CreatedBy: types.StringValue(p.CreatedBy),
+		UpdatedAt: millisToRFC3339(p.UpdatedAt),
+		UpdatedBy: types.StringValue(p.UpdatedBy),
 	}
+}
+
+// nullIfZero is null for a value Hevo did not return, such as an ON_DEMAND Pipeline's frequency.
+func nullIfZero(v int64) types.Int64 {
+	if v == 0 {
+		return types.Int64Null()
+	}
+
+	return types.Int64Value(v)
 }
 
 // PipelinesDatasourceModel is the Terraform value of the hevo_pipelines data source.

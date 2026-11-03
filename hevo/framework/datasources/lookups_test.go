@@ -18,6 +18,8 @@ const pipelineJSON = `{"id": 42, "name": "HubSpot to Snowflake", "state": "Initi
   "health": {"value": "HEALTHY"}, "source": {"name": "HubSpot", "connector_id": "hubspot", "type": "HUBSPOT"},
   "destination_id": 7, "destination_prefix": "hubspot_", "replication_type": "HISTORICAL_AND_INCREMENTAL",
   "load_mode": "MERGE", "schema_evolution": "ALLOW_ALL", "schedule": {"sync_type": "SCHEDULED", "frequency_minutes": 60},
+  "failure_handling_policy": {"object_failure_level": "PARTIAL", "object_failure_threshold": 5},
+  "latency_alert": {"enabled": true, "threshold_minutes": 180},
   "created_at": 1760000000000, "created_by": "ops@acme.com", "updated_at": 1760000000000, "updated_by": "ops@acme.com"}`
 
 func TestDestinationDatasourcesMock(t *testing.T) {
@@ -86,7 +88,9 @@ data "hevo_pipelines" "filtered" {
 					resource.TestCheckResourceAttr("data.hevo_pipeline.p", "state", "Initialized"),
 					resource.TestCheckResourceAttr("data.hevo_pipeline.p", "source_type", "HUBSPOT"),
 					resource.TestCheckResourceAttr("data.hevo_pipeline.p", "destination_id", "7"),
-					resource.TestCheckResourceAttr("data.hevo_pipeline.p", "frequency_minutes", "60"),
+					resource.TestCheckResourceAttr("data.hevo_pipeline.p", "schedule.frequency_minutes", "60"),
+					resource.TestCheckResourceAttr("data.hevo_pipeline.p", "failure_handling_policy.object_failure_level", "PARTIAL"),
+					resource.TestCheckResourceAttr("data.hevo_pipeline.p", "latency_alert.threshold_minutes", "180"),
 					resource.TestCheckResourceAttr("data.hevo_pipelines.filtered", "pipelines.#", "1"),
 					resource.TestCheckResourceAttr("data.hevo_pipelines.filtered", "pipelines.0.name", "HubSpot to Snowflake"),
 				),

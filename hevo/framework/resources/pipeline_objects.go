@@ -33,7 +33,50 @@ type pipelineObjects struct {
 var (
 	_ resource.ResourceWithConfigure   = (*pipelineObjects)(nil)
 	_ resource.ResourceWithImportState = (*pipelineObjects)(nil)
+	_ resource.ResourceWithModifyPlan  = (*pipelineObjects)(nil)
 )
+
+// ModifyPlan checks that each object an update adds exists in the Pipeline, one GET per added
+// object, and fails the plan with Hevo's message for one that does not. Objects already in state
+// are not read again. A create is not checked: a new Pipeline lists no objects until Hevo has
+// discovered them, which the create waits for.
+func (r *pipelineObjects) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() || r.GetClient() == nil || r.GetSkipPlanTimeValidation() {
+		return
+	}
+
+	var plan, state model.PipelineObjectsResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+
+	if resp.Diagnostics.HasError() || plan.PipelineID.IsUnknown() {
+		return
+	}
+
+	id, err := strconv.ParseInt(plan.PipelineID.ValueString(), 10, 64)
+	if err != nil {
+		return
+	}
+
+	added := make([]string, 0, len(plan.Objects))
+
+	for name := range plan.Objects {
+		if _, ok := state.Objects[name]; !ok {
+			added = append(added, name)
+		}
+	}
+
+	sort.Strings(added)
+
+	for _, name := range added {
+		_, err := r.GetClient().GetPipelineObject().PipelineID(id).ObjectName(name).Do(ctx)
+		if hevo.IsNotFound(err) {
+			resp.Diagnostics.AddAttributeError(path.Root("objects").AtMapKey(name), "Unknown object", core.ErrorDetail(err))
+		}
+		// Any other failure is left to the apply.
+	}
+}
 
 func (r *pipelineObjects) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_pipeline_objects"
@@ -109,7 +152,7 @@ func (r *pipelineObjects) apply(
 
 	id, err := strconv.ParseInt(plan.PipelineID.ValueString(), 10, 64)
 	if err != nil {
-		diags.AddAttributeError(path.Root("pipeline_id"), "Invalid pipeline_id", err.Error())
+		diags.AddAttributeError(path.Root("pipeline_id"), "Invalid pipeline_id", core.ErrorDetail(err))
 
 		return
 	}
@@ -138,13 +181,13 @@ func (r *pipelineObjects) apply(
 		return err
 	})
 	if err != nil {
-		diags.AddError("Unable to update the Pipeline's objects", err.Error())
+		diags.AddError("Unable to update the Pipeline's objects", core.ErrorDetail(err))
 
 		return
 	}
 
 	if _, err := core.WaitForPipeline(ctx, r.GetClient(), id); err != nil {
-		diags.AddError("The object selection did not finish applying", err.Error())
+		diags.AddError("The object selection did not finish applying", core.ErrorDetail(err))
 
 		return
 	}
@@ -161,7 +204,7 @@ func (r *pipelineObjects) apply(
 		return selectionApplied(plan, objects), nil
 	})
 	if err != nil {
-		diags.AddError("The object selection did not finish applying", err.Error())
+		diags.AddError("The object selection did not finish applying", core.ErrorDetail(err))
 	}
 }
 
@@ -266,7 +309,7 @@ func (r *pipelineObjects) Read(ctx context.Context, req resource.ReadRequest, re
 
 	id, err := strconv.ParseInt(state.PipelineID.ValueString(), 10, 64)
 	if err != nil {
-		resp.Diagnostics.AddError("Invalid pipeline_id in state", err.Error())
+		resp.Diagnostics.AddError("Invalid pipeline_id in state", core.ErrorDetail(err))
 	}
 
 	if resp.Diagnostics.HasError() {
@@ -282,12 +325,26 @@ func (r *pipelineObjects) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to read the Pipeline's objects", err.Error())
+		resp.Diagnostics.AddError("Unable to read the Pipeline's objects", core.ErrorDetail(err))
 
 		return
 	}
 
-	resp.Diagnostics.Append(state.ReadFromObjects(ctx, objects)...)
+	// On import, an object's load mode is read when it differs from the Pipeline's.
+	pipelineLoadMode := ""
+
+	if state.Select.IsNull() {
+		pipeline, err := r.GetClient().GetPipeline().PipelineID(id).Do(ctx)
+		if err != nil {
+			resp.Diagnostics.AddError("Unable to read the Pipeline", core.ErrorDetail(err))
+
+			return
+		}
+
+		pipelineLoadMode = pipeline.Data.LoadMode
+	}
+
+	state.ReadFromObjects(objects, pipelineLoadMode)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

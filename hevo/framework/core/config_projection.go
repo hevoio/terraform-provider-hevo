@@ -220,7 +220,8 @@ func interfaceToAttr(v any) (attr.Value, diag.Diagnostics) {
 //
 //   - writeOnly (or a masked value when the schema is unavailable): keep the local value, since
 //     the API never returns it.
-//   - in the mask but absent remotely: null, to surface the drift.
+//   - in the mask but absent remotely: the local value when it is the schema's default, which
+//     Hevo uses for a key never sent; otherwise null, to surface the drift.
 //   - an object: recurse.
 //   - a scalar equal to the local value except in type (443 and "443"): keep the local value.
 //   - otherwise: take the remote value.
@@ -239,6 +240,8 @@ func ProjectConfig(remote, mask map[string]any, schema *Property) map[string]any
 
 		switch {
 		case prop != nil && prop.WriteOnly, isMasked(remoteValue):
+			result[key] = local
+		case !present && isDefault(local, prop):
 			result[key] = local
 		case !present:
 			result[key] = nil
@@ -282,6 +285,11 @@ func importConfig(remote map[string]any, schema *Property) map[string]any {
 	}
 
 	return result
+}
+
+// isDefault reports whether v is the schema's default for prop.
+func isDefault(v any, prop *Property) bool {
+	return prop != nil && prop.Default != nil && ScalarsEqual(prop.Default, v)
 }
 
 // isMasked reports whether an API value is a masked credential: a non-empty run of asterisks.
@@ -335,4 +343,27 @@ func ChangedConfig(plan, state map[string]any) map[string]any {
 	}
 
 	return changed
+}
+
+// WithoutCurrentValues returns the keys of changed whose values Hevo does not already have, read
+// from remote, or from the schema's default for a key Hevo does not return. Hevo rejects a key
+// that cannot be edited even when its value is unchanged, so an unchanged key is not sent.
+// Credentials are always sent: Hevo masks them, so they cannot be compared.
+func WithoutCurrentValues(changed, remote map[string]any, schema *Property) map[string]any {
+	result := make(map[string]any, len(changed))
+
+	for key, value := range changed {
+		prop := schema.property(key)
+		remoteValue, present := remote[key]
+
+		switch {
+		case prop != nil && prop.WriteOnly, isMasked(remoteValue):
+			result[key] = value
+		case present && ScalarsEqual(remoteValue, value), !present && isDefault(value, prop):
+		default:
+			result[key] = value
+		}
+	}
+
+	return result
 }

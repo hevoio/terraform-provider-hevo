@@ -40,5 +40,6 @@ output "snowflake_required_keys" {
 - `display_name` (String) The connector's name in the Hevo UI.
 - `required_config_keys` (List of String) The `config` keys always required. Keys required only under a choice are in `schema_json`.
 - `schema_json` (String) The JSON Schema (draft 2020-12) of the create body, as JSON. Read it with `jsondecode(...)`; the connector's settings are under `properties.config`.
-- `type` (String) The connector's type, for example `SNOWFLAKE`.
-- `write_only_config_keys` (List of String) The `config` keys that are credentials: accepted on write, masked in every read.
+- `source_types` (List of String) The variants of a source connector, the values `source_type` of `hevo_pipeline` takes, for example `AURORA` or `AWS_RDS_MYSQL`. Empty for a destination connector.
+- `type` (String) The connector's type, for example `SNOWFLAKE`; for a source connector, its default variant, for example `MYSQL`.
+- `write_only_config_keys` (List of String) The `config` keys that are credentials: accepted on write, masked in every read. Keys Hevo masks by their name, such as Snowflake's `private_key`, are listed even where the schema does not mark them write-only.
