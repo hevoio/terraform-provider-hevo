@@ -367,6 +367,60 @@ func TestPipelineObjectsResourceMock(t *testing.T) {
 	})
 }
 
+func TestPipelineObjectsResourceAllIncludesFieldsAgainMock(t *testing.T) {
+	t.Parallel()
+
+	client, factories := mock.NewProvider()
+	fake := newFakeObjects()
+	fake.register(t, client)
+
+	excluded := objectsConfig("all", `
+    "public.events" = { enabled = false }
+    "public.users"  = { excluded_fields = ["ssn"] }
+`)
+	expectExcluded := func(*terraformState) error {
+		if !fake.objects["public.users"].excluded["ssn"] {
+			return fmt.Errorf("ssn is not excluded; PATCH = %v", fake.lastPatch)
+		}
+
+		return nil
+	}
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{Config: excluded, Check: expectExcluded},
+			{
+				// Under "all", removing excluded_fields includes the fields again.
+				Config: objectsConfig("all", `
+    "public.events" = { enabled = false }
+    "public.users"  = {}
+`),
+				Check: expectIncluded(fake, "public.users", "ssn"),
+			},
+			{Config: excluded, Check: expectExcluded},
+			{
+				// So does removing the object from the configuration.
+				Config: objectsConfig("all", `
+    "public.events" = { enabled = false }
+`),
+				Check: expectIncluded(fake, "public.users", "ssn"),
+			},
+			{Config: excluded, Check: expectExcluded},
+			{
+				// And removing every object.
+				Config: mock.ProviderConfig + `
+resource "hevo_pipeline_objects" "p" {
+  pipeline_id = "42"
+  select      = "all"
+}
+`,
+				Check: expectIncluded(fake, "public.users", "ssn"),
+			},
+		},
+	})
+}
+
 func TestPipelineObjectsResourceImportMock(t *testing.T) {
 	t.Parallel()
 

@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -229,8 +230,9 @@ func selectionApplied(plan model.PipelineObjectsResourceModel, objects []pipelin
 
 // selections builds one entry per object to send. Under "listed" (EXCLUDE_ALL) every enabled
 // object is named, so the request leaves exactly those selected; under "all" (INCLUDE_ALL) the
-// disabled objects are named, plus enabled ones that carry a load mode or excluded fields.
-// Fields excluded before and no longer excluded are sent as included.
+// disabled objects are named, plus enabled ones that carry a load mode or excluded fields, or
+// that had fields excluded before. Fields excluded before and no longer excluded are sent as
+// included, including for an object removed from the configuration under "all".
 func selections(
 	ctx context.Context,
 	plan model.PipelineObjectsResourceModel,
@@ -238,20 +240,20 @@ func selections(
 	diags *diag.Diagnostics,
 ) []*pipelineobjects.ObjectSelection {
 	listed := plan.Select.ValueString() == hevoschema.SelectListed
-	names := make([]string, 0, len(plan.Objects))
+	objects := make(map[string]model.PipelineObjectModel, len(plan.Objects))
+	maps.Copy(objects, plan.Objects)
 
-	for name := range plan.Objects {
-		names = append(names, name)
+	if !listed {
+		addUnnamedWithExcludedFields(objects, prior)
 	}
 
-	sort.Strings(names)
-
+	names := slices.Sorted(maps.Keys(objects))
 	result := []*pipelineobjects.ObjectSelection{}
 
 	for _, name := range names {
-		object := plan.Objects[name]
+		object := objects[name]
 		enabled := object.Enabled.IsNull() || object.Enabled.ValueBool()
-		hasOverrides := !object.LoadMode.IsNull() || !object.ExcludedFields.IsNull()
+		hasOverrides := !object.LoadMode.IsNull() || !object.ExcludedFields.IsNull() || hasExcludedFields(prior[name])
 
 		if listed && !enabled || !listed && enabled && !hasOverrides {
 			continue
@@ -266,6 +268,27 @@ func selections(
 	}
 
 	return result
+}
+
+// addUnnamedWithExcludedFields adds, with default settings, each object in state that excluded
+// fields and is no longer named. Under "all" such an object is selected with its defaults, so the
+// fields it excluded are included again.
+func addUnnamedWithExcludedFields(objects, prior map[string]model.PipelineObjectModel) {
+	for name, object := range prior {
+		if _, named := objects[name]; !named && hasExcludedFields(object) {
+			objects[name] = model.PipelineObjectModel{
+				Enabled:        types.BoolNull(),
+				LoadMode:       types.StringNull(),
+				ExcludedFields: types.SetNull(types.StringType),
+			}
+		}
+	}
+}
+
+// hasExcludedFields reports whether an object in state excludes any field.
+func hasExcludedFields(object model.PipelineObjectModel) bool {
+	return !object.ExcludedFields.IsNull() && !object.ExcludedFields.IsUnknown() &&
+		len(object.ExcludedFields.Elements()) > 0
 }
 
 func addOverrides(
