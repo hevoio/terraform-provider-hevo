@@ -1,0 +1,62 @@
+name: Testing
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, test and docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Build
+        run: go build ./...
+      # Unit tests, and acceptance tests against the preview environment once its key is set.
+      - name: Tests
+        env:
+          TF_ACC: ${{ secrets.HEVO_ACCESS_KEY != '' && '1' || '' }}
+          HEVO_HOST: https://preview.hevodata.com
+          HEVO_ACCESS_KEY: ${{ secrets.HEVO_ACCESS_KEY }}
+          HEVO_SECRET_KEY: ${{ secrets.HEVO_SECRET_KEY }}
+          HEVO_E2E_DESTINATION: ${{ secrets.HEVO_E2E_DESTINATION }}
+          HEVO_E2E_PIPELINE: ${{ secrets.HEVO_E2E_PIPELINE }}
+          HEVO_E2E_OBJECTS: ${{ secrets.HEVO_E2E_OBJECTS }}
+        run: go test -race -shuffle=on -timeout 60m ./...
+      - name: Docs are current
+        run: |
+          go generate ./...
+          git diff --exit-code -- docs/ || { echo "::error::docs/ is stale; run 'make docs' and commit it"; exit 1; }
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+
+  goreleaser-check:
+    name: Release config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: check
