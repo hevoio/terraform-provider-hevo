@@ -8,7 +8,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hevoio/hevo-go/metadata"
+	"github.com/hevoio/hevo-go-sdk/metadata"
 
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core"
 )

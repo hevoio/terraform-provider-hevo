@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hevoio/hevo-go"
-	"github.com/hevoio/hevo-go/common"
-	"github.com/hevoio/hevo-go/destinations"
-	httputils "github.com/hevoio/hevo-go/http_utils"
-	"github.com/hevoio/hevo-go/pipelines"
+	"github.com/hevoio/hevo-go-sdk"
+	"github.com/hevoio/hevo-go-sdk/common"
+	"github.com/hevoio/hevo-go-sdk/destinations"
+	httputils "github.com/hevoio/hevo-go-sdk/http_utils"
+	"github.com/hevoio/hevo-go-sdk/pipelines"
 )
 
 // CreateRecoveryWait bounds the search for a resource that a failed create may still have made.

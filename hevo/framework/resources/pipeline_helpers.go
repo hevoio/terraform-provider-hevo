@@ -6,8 +6,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hevoio/hevo-go"
-	"github.com/hevoio/hevo-go/pipelines"
+	"github.com/hevoio/hevo-go-sdk"
+	"github.com/hevoio/hevo-go-sdk/pipelines"
 
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core"
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core/model"

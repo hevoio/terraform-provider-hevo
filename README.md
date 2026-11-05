@@ -1,6 +1,6 @@
 # Terraform Provider for Hevo
 
-[![Testing](https://img.shields.io/github/actions/workflow/status/hevoio/terraform-provider-hevo/testing.yml?branch=master)](https://github.com/hevoio/terraform-provider-hevo/actions)
+[![Testing](https://img.shields.io/github/actions/workflow/status/hevoio/terraform-provider-hevo/testing.yml?branch=main)](https://github.com/hevoio/terraform-provider-hevo/actions)
 [![License](https://img.shields.io/github/license/hevoio/terraform-provider-hevo)](./LICENSE)
 
 Manage [Hevo](https://hevodata.com) Pipelines, Destinations and the objects each Pipeline

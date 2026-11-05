@@ -14,8 +14,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hevoio/hevo-go"
-	httputils "github.com/hevoio/hevo-go/http_utils"
+	"github.com/hevoio/hevo-go-sdk"
+	httputils "github.com/hevoio/hevo-go-sdk/http_utils"
 
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core"
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/datasources"

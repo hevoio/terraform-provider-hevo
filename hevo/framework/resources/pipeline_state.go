@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hevoio/hevo-go"
+	"github.com/hevoio/hevo-go-sdk"
 
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core"
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core/model"

@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
-	"github.com/hevoio/hevo-go/tests/mock"
+	"github.com/hevoio/hevo-go-sdk/tests/mock"
 
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core"
 )

@@ -5,7 +5,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hevoio/hevo-go/pipelines"
+	"github.com/hevoio/hevo-go-sdk/pipelines"
 )
 
 // PipelineResourceModel is the Terraform value of hevo_pipeline.

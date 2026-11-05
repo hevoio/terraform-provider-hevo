@@ -5,7 +5,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	pipelineobjects "github.com/hevoio/hevo-go/pipeline_objects"
+	pipelineobjects "github.com/hevoio/hevo-go-sdk/pipeline_objects"
 )
 
 // SelectableObjectStatuses are the object statuses under which Hevo lets an object be selected or

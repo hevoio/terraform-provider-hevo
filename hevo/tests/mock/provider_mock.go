@@ -9,7 +9,7 @@ package mock
 import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
-	sdkmock "github.com/hevoio/hevo-go/tests/mock"
+	sdkmock "github.com/hevoio/hevo-go-sdk/tests/mock"
 
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework"
 )

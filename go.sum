@@ -128,8 +128,8 @@ github.com/hashicorp/terraform-svchost v0.2.1 h1:ubvrTFw3Q7CsoEaX7V06PtCTKG3wu7G
 github.com/hashicorp/terraform-svchost v0.2.1/go.mod h1:zDMheBLvNzu7Q6o9TBvPqiZToJcSuCLXjAXxBslSky4=
 github.com/hashicorp/yamux v0.1.2 h1:XtB8kyFOyHXYVFnwT5C3+Bdo8gArse7j2AQ0DA0Uey8=
 github.com/hashicorp/yamux v0.1.2/go.mod h1:C+zze2n6e/7wshOZep2A70/aQU6QBRWJO/G6FT1wIns=
-github.com/hevoio/hevo-go v0.0.0-20261103031525-bb5659cf0d28 h1:nVScNNquREvmAlvlSIFBs/Nh1cFXAaLsLE0ZXdiD5So=
-github.com/hevoio/hevo-go v0.0.0-20261103031525-bb5659cf0d28/go.mod h1:VPuTa9mNxtkQRwkrt2NRWo8GslLK2FtlYOUjPE5+4g0=
+github.com/hevoio/hevo-go-sdk v0.1.0 h1:4NvR5DyGDJmvOqmp7oITmhZsAsLj/RHZ2z0LRtAlEZ0=
+github.com/hevoio/hevo-go-sdk v0.1.0/go.mod h1:x0HQTXfsgcbU/8OaoT1qq8d84e0rgsaNbgd3fTLXF/k=
 github.com/huandu/xstrings v1.3.3 h1:/Gcsuc1x8JVbJ9/rlye4xZnVAbEkGauT8lbebqcQws4=
 github.com/huandu/xstrings v1.3.3/go.mod h1:y5/lhBue+AyNmUVz9RLU9xbLR0o4KIIExikq4ovT0aE=
 github.com/imdario/mergo v0.3.11/go.mod h1:jmQim1M+e3UYxmgPu/WyfjB3N3VflVyUjjjwH0dnCYA=

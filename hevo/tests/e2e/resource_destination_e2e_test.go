@@ -13,9 +13,9 @@ import (
 // TestResourceDestinationE2E creates, renames, imports and destroys a Destination. Set
 // HEVO_E2E_DESTINATION to {"connector_id": "...", "config": {...}} with working credentials:
 // Hevo tests the connection on create.
+//
+//nolint:paralleltest // creates Hevo resources: Hevo serializes connection tests with the same config, so these run one at a time
 func TestResourceDestinationE2E(t *testing.T) {
-	t.Parallel()
-
 	raw := os.Getenv("HEVO_E2E_DESTINATION")
 	if raw == "" {
 		t.Skip("set HEVO_E2E_DESTINATION to run the Destination acceptance test")

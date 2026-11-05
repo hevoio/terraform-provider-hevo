@@ -14,9 +14,9 @@ import (
 // TestResourcePipelineE2E creates, edits, imports and destroys a Pipeline. Set
 // HEVO_E2E_PIPELINE to {"source_connector_id": "...", "source_config": {...},
 // "destination_id": "..."} with a Source Hevo can reach and an existing Destination.
+//
+//nolint:paralleltest // creates Hevo resources: Hevo serializes connection tests with the same config, so these run one at a time
 func TestResourcePipelineE2E(t *testing.T) {
-	t.Parallel()
-
 	raw := os.Getenv("HEVO_E2E_PIPELINE")
 	if raw == "" {
 		t.Skip("set HEVO_E2E_PIPELINE to run the Pipeline acceptance test")

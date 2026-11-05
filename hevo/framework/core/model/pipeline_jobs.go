@@ -2,7 +2,7 @@ package model
 
 import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hevoio/hevo-go/jobs"
+	"github.com/hevoio/hevo-go-sdk/jobs"
 )
 
 // PipelineJobsDatasourceModel is the Terraform value of the hevo_pipeline_jobs data source.

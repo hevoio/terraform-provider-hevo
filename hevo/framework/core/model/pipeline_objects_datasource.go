@@ -2,7 +2,7 @@ package model
 
 import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	pipelineobjects "github.com/hevoio/hevo-go/pipeline_objects"
+	pipelineobjects "github.com/hevoio/hevo-go-sdk/pipeline_objects"
 )
 
 // PipelineObjectsDatasourceModel is the Terraform value of the hevo_pipeline_objects data source.

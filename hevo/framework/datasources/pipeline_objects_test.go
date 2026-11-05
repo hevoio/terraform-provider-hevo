@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	sdkmock "github.com/hevoio/hevo-go/tests/mock"
+	sdkmock "github.com/hevoio/hevo-go-sdk/tests/mock"
 
 	"github.com/hevoio/terraform-provider-hevo/hevo/tests/mock"
 )

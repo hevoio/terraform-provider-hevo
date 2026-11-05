@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	httputils "github.com/hevoio/hevo-go/http_utils"
+	httputils "github.com/hevoio/hevo-go-sdk/http_utils"
 )
 
 // SchemaReadErrorDetail is the text of a failure to read a connector's schema at plan time. It

@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hevoio/hevo-go"
+	"github.com/hevoio/hevo-go-sdk"
 )
 
 type clientContainer struct {

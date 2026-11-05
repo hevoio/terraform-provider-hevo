@@ -7,8 +7,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/hevoio/hevo-go"
-	"github.com/hevoio/hevo-go/pipelines"
+	"github.com/hevoio/hevo-go-sdk"
+	"github.com/hevoio/hevo-go-sdk/pipelines"
 )
 
 // Pipeline states the API reports while an action or edit is being applied.

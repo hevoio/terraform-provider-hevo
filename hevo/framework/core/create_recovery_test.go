@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	httputils "github.com/hevoio/hevo-go/http_utils"
+	httputils "github.com/hevoio/hevo-go-sdk/http_utils"
 )
 
 func TestMayHaveBeenCreated(t *testing.T) {

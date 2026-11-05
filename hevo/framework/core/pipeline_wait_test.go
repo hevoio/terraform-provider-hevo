@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	httputils "github.com/hevoio/hevo-go/http_utils"
+	httputils "github.com/hevoio/hevo-go-sdk/http_utils"
 )
 
 func TestMain(m *testing.M) {

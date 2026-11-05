@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/hevoio/hevo-go"
+	"github.com/hevoio/hevo-go-sdk"
 )
 
 // GetSourceConnectorSchema returns the config schema of a source connector, fetching it once per

@@ -15,7 +15,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
-	sdkmock "github.com/hevoio/hevo-go/tests/mock"
+	sdkmock "github.com/hevoio/hevo-go-sdk/tests/mock"
 
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core"
 	"github.com/hevoio/terraform-provider-hevo/hevo/tests/mock"

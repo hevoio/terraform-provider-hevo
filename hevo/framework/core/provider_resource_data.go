@@ -3,7 +3,7 @@ package core
 import (
 	"sync"
 
-	"github.com/hevoio/hevo-go"
+	"github.com/hevoio/hevo-go-sdk"
 )
 
 // ProviderResourceData is what the provider hands every resource and data source.

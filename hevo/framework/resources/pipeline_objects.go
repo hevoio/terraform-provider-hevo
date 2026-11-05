@@ -12,8 +12,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hevoio/hevo-go"
-	pipelineobjects "github.com/hevoio/hevo-go/pipeline_objects"
+	"github.com/hevoio/hevo-go-sdk"
+	pipelineobjects "github.com/hevoio/hevo-go-sdk/pipeline_objects"
 
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core"
 	"github.com/hevoio/terraform-provider-hevo/hevo/framework/core/model"

@@ -15,9 +15,9 @@ import (
 // TestFlowE2E runs the whole flow in one apply: a Destination, a Pipeline into it, its objects,
 // enabling it, then reading its jobs. It needs HEVO_E2E_DESTINATION and HEVO_E2E_PIPELINE (whose
 // destination_id is ignored here), and HEVO_E2E_OBJECTS: a JSON list of object names to select.
+//
+//nolint:paralleltest // creates Hevo resources: Hevo serializes connection tests with the same config, so these run one at a time
 func TestFlowE2E(t *testing.T) {
-	t.Parallel()
-
 	destinationRaw, pipelineRaw, objectsRaw := os.Getenv("HEVO_E2E_DESTINATION"), os.Getenv("HEVO_E2E_PIPELINE"), os.Getenv("HEVO_E2E_OBJECTS")
 	if destinationRaw == "" || pipelineRaw == "" || objectsRaw == "" {
 		t.Skip("set HEVO_E2E_DESTINATION, HEVO_E2E_PIPELINE and HEVO_E2E_OBJECTS to run the flow acceptance test")
